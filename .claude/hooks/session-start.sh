@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# SessionStart hook — makes Engram usable in Claude Code on the web.
+#
+#   1. points ENGRAM_HOME at the private state repo, so the learning state
+#      survives the container being reclaimed
+#   2. runs `engram.py init` (idempotent)
+#   3. surfaces due reviews — Engram's own two-line nudge, silent when nothing
+#      is due
+#   4. installs node deps so `bun run test` / `npx tsc --noEmit` work
+#
+# Runs synchronously: the due nudge has to be on screen before the first turn.
+# MUST NEVER FAIL A SESSION — every path ends in exit 0.
+set -u
+
+HOOK_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+# shellcheck source=engram-env.sh
+. "$HOOK_DIR/engram-env.sh" 2>/dev/null || exit 0
+
+[ -f "$ENGRAM_PROJECT/scripts/engram.py" ] || exit 0
+command -v python3 >/dev/null 2>&1 || {
+  echo "engram: python3 fehlt — die Engine kann nicht laufen."
+  exit 0
+}
+
+# --- 1. state location --------------------------------------------------------
+if [ -n "$ENGRAM_STATE" ]; then
+  mkdir -p "$ENGRAM_HOME" 2>/dev/null
+  export ENGRAM_HOME
+  [ -n "${CLAUDE_ENV_FILE:-}" ] && echo "export ENGRAM_HOME=\"$ENGRAM_HOME\"" >> "$CLAUDE_ENV_FILE"
+else
+  # Loud on purpose. Silent data loss is the worst outcome here: the learner
+  # would do the work and lose the schedule that work was for.
+  echo "engram: WARNUNG — das private State-Repo (engram-learning) ist dieser Session nicht angehängt."
+  echo "engram: Der Lernstand liegt nur im Container und ist nach dessen Ablauf weg. Siehe CLAUDE.md."
+fi
+
+# --- 2./3. init + due nudge ---------------------------------------------------
+# The engine prints upstream's command spelling (/learn, /review, /coach). Here the
+# skills are namespaced to avoid colliding with the global `learn` skill and with
+# Claude Code's built-in /review, so rewrite the names on the way out rather than
+# patching upstream code — that keeps `git merge upstream/main` conflict-free.
+python3 "$ENGRAM_PROJECT/scripts/engram.py" init >/dev/null 2>&1
+python3 "$ENGRAM_PROJECT/scripts/engram.py" session-start 2>/dev/null \
+  | sed -E 's#/(learn|review|coach)\b#/engram-\1#g' || true
+
+# --- 4. node deps (non-fatal; the container image caches this) -----------------
+# --no-save: bun.lock is currently out of sync with package.json upstream, and a
+# rewrite would leave every session with a dirty tree and a future merge conflict.
+if [ ! -d "$ENGRAM_PROJECT/node_modules" ] && command -v bun >/dev/null 2>&1; then
+  (cd "$ENGRAM_PROJECT" && bun install --no-save --silent) >/dev/null 2>&1 || true
+fi
+
+exit 0
