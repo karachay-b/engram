@@ -18,8 +18,18 @@ HOOK_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2>/dev/null &&
 
 cd "$ENGRAM_STATE" 2>/dev/null || exit 0
 
-# Nothing changed under learning/ → nothing to do.
-if [ -z "$(git status --porcelain -- learning 2>/dev/null)" ]; then
+# What gets persisted. sources/ holds the ingested reading material (chunks, index,
+# manifests). It is derived data, but re-deriving it needs the original PDF — which
+# is gitignored and dies with the container. So it is persisted like the state.
+#
+# Built as a list rather than hardcoded, because `git add -- sources` is FATAL when
+# the directory does not exist and would then stage nothing at all — including
+# learning/. A repo that has never ingested a source must keep saving its state.
+PATHS="learning"
+[ -d "$ENGRAM_STATE/sources" ] && PATHS="$PATHS sources"
+
+# Nothing changed → nothing to do.
+if [ -z "$(git status --porcelain -- $PATHS 2>/dev/null)" ]; then
   exit 0
 fi
 
@@ -38,7 +48,13 @@ except Exception:
     print("Lernstand aktualisiert")' 2>/dev/null)"
 [ -n "$SUMMARY" ] || SUMMARY="Lernstand aktualisiert"
 
-git add -A -- learning >/dev/null 2>&1
+# Quellen nur zählen, nicht interpretieren — ein Verzeichnis mit source.json ist eine.
+if [ -d "$ENGRAM_STATE/sources" ]; then
+  N_SRC="$(find "$ENGRAM_STATE/sources" -mindepth 2 -maxdepth 2 -name source.json 2>/dev/null | wc -l | tr -d ' ')"
+  [ "${N_SRC:-0}" -gt 0 ] && SUMMARY="$SUMMARY, $N_SRC Quellen"
+fi
+
+git add -A -- $PATHS >/dev/null 2>&1
 git commit -q -m "engram: $SUMMARY" >/dev/null 2>&1 || exit 0
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"

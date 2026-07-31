@@ -11,6 +11,7 @@ und diese Datei gehören zum Cloud-Setup; alles andere ist unveränderter Upstre
 | `/engram-learn <topic>` | `/learn` | `learn` kollidiert mit einem globalen Skill des Nutzers |
 | `/engram-review` | `/review` | `review` kollidiert mit Claude Codes GitHub-PR-Review |
 | `/engram-coach` | `/coach` | einheitliches Präfix |
+| `/engram-source` | — | kein Upstream-Pendant; siehe „Quellen" unten |
 
 `.claude/skills/engram-*/SKILL.md` sind dünne Aliase: sie enthalten nur Frontmatter
 und die Anweisung, das echte `skills/<name>/SKILL.md` zu lesen und **wörtlich** zu
@@ -47,6 +48,38 @@ Reihenfolge:
 
 Der Suchpfad des Hooks: `$ENGRAM_STATE_REPO` → `<repo>/../engram-learning` →
 `/home/user/engram-learning` → `$HOME/engram-learning`.
+
+## Quellen: Bücher und PDFs als Lernstoff
+
+Engram selbst kennt keine Quellen — die Engine speichert nur den Konzept-DAG und die
+Receipts, das Node-Schema hat kein Zitatfeld. Das Quellen-System füllt diese Lücke,
+ohne die Engine anzufassen.
+
+- **Werkzeug:** `.claude/tools/engram_source.py`, getrieben von `/engram-source`.
+  Ein PDF wird **einmal** deterministisch zerlegt: Manifest (`source.json`), ein
+  kleines Kartenblatt (`index.md`) und Chunks von 400–1200 Wörtern mit
+  `[S. n]`-Markern an jedem Seitenumbruch.
+- **Ablage:** `<engram-learning>/sources/<slug>/` — neben `learning/`, nicht darin.
+  `learning/` gehört der Engine; ein Fremdverzeichnis dort würde mit einer künftigen
+  Upstream-Funktion kollidieren.
+- **Originale bleiben draußen.** `sources/.gitignore` hält PDFs aus dem Git. Der
+  `sha256` im Manifest ist der Wiedervorlage-Check (`engram-source verify`).
+- **Nachschlagen statt laden:** Index lesen → `find` → 3–10 Chunks gezielt lesen.
+  Kein Embedding-Index; bei ~40 Chunks pro Buch wäre er langsamer, undurchsichtig
+  und müsste in jedem Container neu gebaut werden.
+- **Verbindung zum Lernstand:** `sources/MAP.md` (via `engram-source map-add`).
+  Das ist die einzige dauerhafte Zuordnung Thema ↔ Quelle.
+
+**Die Rolle des Buchs ist Inhalt, nicht Gliederung.** Der Curriculum-Architect nennt
+Kapitel-Kopieren seinen kardinalen Fehler; der Spawn-Baustein im `engram-learn`-Alias
+stellt das scharf. Das ist die **eine bewusste Kopplung an Upstream**: Ändert der
+Upstream die Rollenbeschreibung des Architects grundlegend, muss dieser Baustein
+nachgezogen werden — dieselbe Klasse von Duplizierung wie die `description`-Zeilen
+der Alias-Skills.
+
+Der Stop-Hook committet `sources/` zusammen mit `learning/`. Rechtlich gilt: Die
+Derivate eines geschützten Buchs sind ebenso geschützt — sie gehören ins private
+Repo und niemals in diesen öffentlichen Fork.
 
 ## Sicherheitsregel aus dem Upstream — gilt unverändert
 
