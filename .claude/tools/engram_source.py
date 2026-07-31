@@ -147,7 +147,22 @@ def sha256_of(path):
 LIGATURES = {"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi",
              "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st"}
 
-NUMBERED = re.compile(r"^(\d+(?:\.\d+)*)[.)]?\s+\S")
+# Gliederungsnummer einer ÜBERSCHRIFT — bewusst enger als "Zahl am Zeilenanfang".
+#
+# Ein Sachbuch ist voller nummerierter Aufzählungen ("3. Konstruktneutralität",
+# "18. Wählen Sie selbst ein Thema."), und die als Abschnittsgrenze zu lesen
+# zerhackt das Buch an genau den Stellen, an denen es zusammengehört. Der
+# typografische Unterschied trägt: Eine Gliederungsnummer ist entweder mehrstufig
+# ("2.1.1 Titel") oder einstufig OHNE Punkt ("3 Die Basistechniken") — ein
+# Listenpunkt schreibt sich "3.".
+NUMBERED = re.compile(r"^(\d+(?:\.\d+)+)\s+\S|^(\d+)\s+\S")
+
+# Inhaltsverzeichnis-Zeile: Punktführung (auch gesperrt gesetzt: ". . . . .")
+# und am Ende die Seitenzahl. Sieht einer nummerierten Überschrift zum
+# Verwechseln ähnlich — und ein Inhaltsverzeichnis als Gliederungsquelle zu
+# nehmen wäre die Kapitelkopie in Reinform, zwanzig Ebenen tief.
+TOC_LINE = re.compile(r"(\.\s?){4,}\s*\d{1,4}\s*$")
+TOC_LINE_ANY = re.compile(r"(\.\s?){4,}\s*\d{1,4}\b")
 
 
 def normalize_chars(text):
@@ -169,11 +184,12 @@ def detect_running_lines(pages):
     Genau das, was der Architect nicht lesen soll — auf jeder Seite derselbe
     Kapiteltitel ist Rauschen, das sich sonst durch jeden Chunk zieht.
 
-    Die Schwelle darf NICHT bei "fast alle Seiten" liegen: ein laufender
-    Kolumnentitel wechselt mit dem Kapitel, steht also nur auf dessen Seiten.
-    Bei drei Kapiteln erreicht keiner davon 60 %. Deshalb: mindestens drei
-    Seiten UND mindestens ein Fünftel des Buchs. Eine echte Überschrift kommt
-    genau einmal vor und bleibt damit unangetastet.
+    Die Schwelle ist ABSOLUT gedeckelt, nicht bloß anteilig. Ein Kolumnentitel
+    wechselt mit dem Kapitel und steht nur auf dessen Seiten: In einem Buch mit
+    467 Seiten erreicht kein einziger 20 % — eine reine Quotenregel findet dort
+    gar nichts und lässt jede Kopfzeile im Text stehen (an echtem Material genau
+    so passiert). Deshalb: mindestens 3 Seiten, aber nie mehr als 8 verlangt.
+    Eine echte Überschrift kommt genau einmal vor und bleibt unangetastet.
 
     Zusätzlich fällt hier der wichtigste Nebeneffekt an: solange der Kolumnentitel
     im Text steht, ist er überschriftenförmig — die Outline-Auflösung würde eine
@@ -186,15 +202,62 @@ def detect_running_lines(pages):
         lines = [l.strip() for l in normalize_chars(raw or "").split("\n") if l.strip()]
         for line in set(lines[:3] + lines[-3:]):
             key = running_line_key(line)
-            if 1 < len(key) <= 70:
+            if 1 < len(key) <= 120:
                 counts[key] = counts.get(key, 0) + 1
-    threshold = max(3, 0.2 * len(pages))
+    threshold = max(3, min(0.2 * len(pages), 8))
     return {k for k, n in counts.items() if n >= threshold}
+
+
+def detect_printed_labels(pages, running, fallback, page_base=1):
+    """Die im Buch GEDRUCKTE Seitenzahl aus den Kolumnentiteln gewinnen.
+
+    Der Anlass ist kein Randfall, sondern der Normalfall bei Sachbüchern: Ein
+    Vorspann (Titelei, Inhalt, Vorwort) verschiebt die gedruckte Nummer gegen die
+    physische. Liefert das PDF keine echten /PageLabels — und viele liefern nur
+    "1, 2, 3, …" —, dann wäre jedes Zitat um den Vorspann verschoben. Ein Verweis
+    "S. 61", der im Buch auf Seite 60 steht, ist schlimmer als gar keiner: Er sieht
+    richtig aus.
+
+    Die Zahl steht im Kolumnentitel, den wir ohnehin gleich entfernen, mal vorn
+    ("60 Definitionen"), mal hinten ("Systemisches Denken … 61"). Also erst lesen,
+    dann wegwerfen.
+
+    Robust gegen Ausreißer (Kapitelöffnungsseiten zeigen oft nur die Kapitelnummer):
+    entscheidend ist nicht die einzelne Seite, sondern der HÄUFIGSTE Versatz
+    zwischen gedruckter und physischer Nummer. Er muss auf der Mehrheit der
+    auswertbaren Seiten gelten, sonst bleibt es bei den physischen Nummern.
+    """
+    if not running:
+        return fallback, None
+    offsets = {}
+    for idx, raw in enumerate(pages):
+        lines = [l.strip() for l in normalize_chars(raw or "").split("\n") if l.strip()]
+        for line in lines[:2] + lines[-2:]:
+            if running_line_key(line) not in running:
+                continue
+            m = re.match(r"^(\d{1,4})\s+\D", line) or re.search(r"\D\s+(\d{1,4})$", line)
+            if not m:
+                continue
+            printed = int(m.group(1))
+            if 0 < printed < 10000:
+                off = printed - (page_base + idx)
+                offsets[off] = offsets.get(off, 0) + 1
+            break
+    if not offsets:
+        return fallback, None
+    best, hits = max(offsets.items(), key=lambda kv: kv[1])
+    total = sum(offsets.values())
+    # Mehrheitsregel: ein Versatz, der sich nicht durchsetzt, ist geraten.
+    if hits < 0.6 * total or hits < 3 or abs(best) > 200:
+        return fallback, None
+    return [str(page_base + i + best) for i in range(len(pages))], best
 
 
 def is_heading(line):
     s = line.strip()
     if not (2 <= len(s) <= 90):
+        return False
+    if TOC_LINE.search(s):
         return False
     if NUMBERED.match(s):
         return True
@@ -203,7 +266,10 @@ def is_heading(line):
     letters = [c for c in s if c.isalpha()]
     if not letters:
         return False
-    if len(s) <= 60 and sum(c.isupper() for c in letters) / len(letters) > 0.8:
+    # Versalzeile als Überschrift — aber mindestens zwei Wörter. Ein einzelnes
+    # Akronym mitten im Text ("CLEAR", "GFK") ist keine Abschnittsgrenze.
+    if (len(s) <= 60 and len(s.split()) >= 2
+            and sum(c.isupper() for c in letters) / len(letters) > 0.8):
         return True
     return False
 
@@ -211,11 +277,27 @@ def is_heading(line):
 def heading_level(line):
     m = NUMBERED.match(line.strip())
     if m:
-        return min(m.group(1).count(".") + 1, 4)
+        return min((m.group(1) or m.group(2)).count(".") + 1, 4)
     return 1
 
 
-def clean_page(raw, running):
+def is_page_number_line(line, label):
+    """Randzeile, die die gedruckte Seitenzahl dieser Seite trägt.
+
+    Der zweite Durchgang der Kolumnentitel-Erkennung, und der genauere: Sobald der
+    Seitenversatz bekannt ist, weiß man für JEDE Seite, welche Zahl auf ihr steht.
+    Eine kurze Randzeile, die mit genau dieser Zahl beginnt oder endet, ist der
+    Kolumnentitel — auch dann, wenn sein Text nur auf fünf Seiten vorkommt und die
+    Häufigkeitsregel ihn deshalb verfehlt (Vorspann, kurze Kapitel).
+    """
+    s = line.strip()
+    if not label or len(s) > 120:
+        return False
+    return bool(re.match(r"^%s\b" % re.escape(label), s)
+                or re.search(r"\b%s$" % re.escape(label), s))
+
+
+def clean_page(raw, running, label=None):
     """Eine Seite → Blöcke [(kind, text)] mit kind in {"heading", "para"}.
 
     Überschriften werden VOR dem Umbruch erkannt und als eigener Block gehalten.
@@ -227,22 +309,30 @@ def clean_page(raw, running):
 
     # Kolumnentitel raus, aber nur am Seitenrand: dieselbe Zeichenfolge mitten im
     # Fließtext ist Inhalt, kein Kopfzeilen-Artefakt.
-    if running:
-        keep = []
-        n = len(lines)
-        for i, line in enumerate(lines):
-            edge = i < 3 or i >= n - 3
-            if edge and line.strip() and running_line_key(line) in running:
+    keep, n = [], len(lines)
+    seen_edge = 0
+    for i, line in enumerate(lines):
+        edge = i < 3 or i >= n - 3
+        if edge and line.strip():
+            if running_line_key(line) in running:
                 continue
-            keep.append(line)
-        lines = keep
+            # Nur die äußersten Randzeilen per Seitenzahl prüfen, sonst könnte ein
+            # Absatz, der zufällig mit dieser Zahl beginnt, verschwinden.
+            if (i < 2 or i >= n - 2) and is_page_number_line(line, label):
+                seen_edge += 1
+                continue
+        keep.append(line)
+    lines = keep
 
     # Silbentrennung am Zeilenende zusammenziehen — nur vor Kleinbuchstaben,
     # damit "Bayes-Regel" am Zeilenumbruch nicht zu "BayesRegel" wird.
     merged = []
     for line in lines:
         if merged and merged[-1].endswith("-") and line[:1].islower():
-            merged[-1] = merged[-1][:-1] + line.lstrip()
+            # .rstrip() nach dem Strich ist nicht kosmetisch: manche Setzer
+            # trennen als "durchgän -", und ohne das bliebe "durchgän gig"
+            # stehen — ein Wort, das es nicht gibt, mitten im Zitat.
+            merged[-1] = merged[-1][:-1].rstrip() + line.lstrip()
         else:
             merged.append(line)
     lines = merged
@@ -287,7 +377,8 @@ def build_doc(pages, labels, running):
     """Baut den Dokumentstring und merkt sich pro Seite (start, end, label)."""
     parts, spans, headings, offset = [], [], [], 0
     for idx, raw in enumerate(pages):
-        blocks = clean_page(raw, running)
+        blocks = clean_page(raw, running,
+                            labels[idx] if idx < len(labels) else None)
         page_start = offset
         for kind, text in blocks:
             if kind == "heading":
@@ -404,6 +495,14 @@ def marks_to_sections(marks, doc_len):
         end = marks[i + 1]["offset"] if i + 1 < len(marks) else doc_len
         if end > m["offset"]:
             sections.append({"path": path, "start": m["offset"], "end": end})
+
+    # Was VOR der ersten Marke steht — Titelei, Inhaltsverzeichnis, Vorwort —
+    # gehört in einen eigenen Abschnitt und nicht in den Papierkorb. Es ist selten
+    # Lernstoff, aber der Index muss abbilden, was in der Quelle steht; sonst
+    # verschwindet Text, ohne dass es jemand bemerkt.
+    if sections and sections[0]["start"] > 0:
+        sections.insert(0, {"path": ["(Vorspann)"], "start": 0,
+                            "end": sections[0]["start"]})
     return sections
 
 
@@ -497,6 +596,12 @@ def classify(text, path):
     head = " ".join(path).lower()
     lines = [l for l in text.split("\n") if l.strip()]
 
+    # Punktführungen zählen, nicht Zeilen: Absätze werden beim Bereinigen zu
+    # Fließtext zusammengezogen, ein Inhaltsverzeichnis landet dadurch in einer
+    # einzigen langen Zeile — eine zeilenbasierte Quote sähe dort nichts.
+    leaders = len(TOC_LINE_ANY.findall(text))
+    if leaders >= 5 and leaders / max(len(text.split()), 1) > 0.02:
+        return "toc-like"
     dotted = sum(1 for l in lines if re.search(r"(\.{3,}|\s)\d{1,4}$", l.strip()))
     if lines and dotted / len(lines) > 0.4:
         return "toc-like"
@@ -599,15 +704,47 @@ def write_index(root, slug, meta, rows):
         "daraus wird der Verweis `(%s §<heading>, S. <n>)`." % slug,
         "`kind: exercise` und `kind: toc-like` beim Kurrikulumbau überspringen.",
         "",
+    ]
+
+    # Kapitelübersicht vor der Chunk-Tabelle. Bei einem 460-Seiten-Buch sind das
+    # zwanzig Zeilen statt zweihundert — genug, um zu entscheiden, wo man
+    # überhaupt nachschlägt, bevor man die große Tabelle liest.
+    chapters = []
+    for r in rows:
+        # "(2/5)" ist ein Größen-Split, kein eigenes Kapitel.
+        top = re.sub(r"\s*\(\d+/\d+\)$", "", r["path"][0])
+        if not chapters or chapters[-1][0] != top:
+            chapters.append([top, r["id"], r["id"], r["pages"][0], r["pages"][-1]])
+        else:
+            chapters[-1][2] = r["id"]
+            chapters[-1][4] = r["pages"][-1]
+    if len(chapters) > 1:
+        out.append("## Kapitel")
+        out.append("")
+        for top, first_id, last_id, p0, p1 in chapters:
+            span = first_id.rsplit("-", 1)[1]
+            if last_id != first_id:
+                span += "–" + last_id.rsplit("-", 1)[1]
+            out.append("- **%s** — S. %s–%s, Chunks %s" % (cell(top), p0, p1, span))
+        out.append("")
+
+    out += [
+        "## Alle Chunks",
+        "",
         "| id | Seiten | Überschrift | kind | W | Anfang |",
         "|---|---|---|---|---|---|",
     ]
     for r in rows:
         pages = r["pages"][0] if r["pages"][0] == r["pages"][-1] \
             else "%s–%s" % (r["pages"][0], r["pages"][-1])
-        heading = " › ".join(r["path"])
+        # Der Index ist das eine Dokument, das IMMER vollständig gelesen wird.
+        # Eine Zelle, die dreißig verschmolzene Abschnitte aufzählt, frisst genau
+        # das Kontextbudget, das er sparen soll — deshalb gedeckelt.
+        heading = " › ".join(r["path"][-2:])
         if r.get("also"):
-            heading += " (+ %s)" % ", ".join(r["also"])
+            extra = r["also"][:2]
+            heading += " (+ %s%s)" % (", ".join(extra),
+                                      " …" if len(r["also"]) > 2 else "")
         out.append("| %s | %s | %s | %s | %d | %s |"
                    % (r["id"], pages, cell(heading), r["kind"],
                       r["words"], cell(r["preview"])))
@@ -690,6 +827,12 @@ def cmd_add(args):
             "scheitert hier an fehlendem poppler)." % (chars / len(raw)))
 
     running = detect_running_lines(raw)
+    # Erst die gedruckte Seitenzahl aus den Kolumnentiteln lesen, dann bereinigen.
+    scoped_labels, page_offset = detect_printed_labels(raw, running, scoped_labels,
+                                                       page_base=first)
+    if page_offset:
+        note("gedruckte Seitenzahlen erkannt: Versatz %+d gegenüber der PDF-Seite"
+             % page_offset)
     doc, spans, headings = build_doc(raw, scoped_labels, running)
     if not doc.strip():
         die("nach der Bereinigung ist kein Text übrig")
@@ -726,6 +869,8 @@ def cmd_add(args):
         "tool": TOOL_VERSION,
         "extractor": "pypdf %s" % __import__("pypdf").__version__,
         "text_layer": "native",
+        "page_labels": ("gedruckt (Versatz %+d)" % page_offset) if page_offset
+                       else "PDF-Seitenzahl",
         "boundaries": boundary,
         "outline": bool(entries),
         "rights": "urheberrechtlich geschützt — Derivate privat, nicht weitergeben",
