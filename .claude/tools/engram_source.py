@@ -605,8 +605,15 @@ def classify(text, path):
     dotted = sum(1 for l in lines if re.search(r"(\.{3,}|\s)\d{1,4}$", l.strip()))
     if lines and dotted / len(lines) > 0.4:
         return "toc-like"
-    if len(TASK_RE.findall(text)) >= 2 or re.search(
-            r"\b(aufgaben|übungen|exercises|problems)\b", head):
+    # `exercise` heißt ÜBUNGSTEIL, nicht "enthält Übungen". Ein Sachbuch streut
+    # Übungskästen mitten in seine Fachabschnitte; zwei Treffer genügen dort
+    # längst nicht. An echtem Material trug "3.5.6 Zirkuläre Fragen" — 1057
+    # Wörter Definition, Beispielkatalog und Perspektiventabelle — das Etikett
+    # und wäre dem Architect damit entzogen worden. Also Dichte statt Vorkommen,
+    # oder die Überschrift sagt es ausdrücklich.
+    tasks = len(TASK_RE.findall(text))
+    dense = tasks >= 2 and tasks >= max(len(text.split()), 1) / 150.0
+    if dense or re.search(r"\b(aufgaben|übungen|exercises|problems)\b", head):
         return "exercise"
     if len(DEF_RE.findall(text)) >= 2 or DEF_RE.search(head):
         return "definition"
@@ -702,7 +709,10 @@ def write_index(root, slug, meta, rows):
         "",
         "Chunks liegen in `chunks/`. Jeder trägt `[S. n]`-Marker an jedem Seitenumbruch —",
         "daraus wird der Verweis `(%s §<heading>, S. <n>)`." % slug,
-        "`kind: exercise` und `kind: toc-like` beim Kurrikulumbau überspringen.",
+        "Beim Kurrikulumbau: `kind: toc-like` überspringen, `kind: exercise` "
+        "nachrangig lesen",
+        "(Übungskataloge sind Rohstoff für `transfer_probe`), "
+        "`kind: definition` zuerst.",
         "",
     ]
 
