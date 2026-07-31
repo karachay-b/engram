@@ -253,6 +253,12 @@ def detect_printed_labels(pages, running, fallback, page_base=1):
     return [str(page_base + i + best) for i in range(len(pages))], best
 
 
+def heading_number(line):
+    """Die Gliederungsnummer einer Überschrift, oder None."""
+    m = NUMBERED.match(line.strip())
+    return (m.group(1) or m.group(2)) if m else None
+
+
 def is_heading(line):
     s = line.strip()
     if not (2 <= len(s) <= 90):
@@ -487,6 +493,20 @@ def marks_to_sections(marks, doc_len):
     for i, m in enumerate(marks):
         while stack and stack[-1]["level"] >= m["level"]:
             stack.pop()
+
+        # Die Nummer schlägt die Ebene. Ein zweizeilig gesetzter Kapitelkopf
+        # ("3" / "Die Basistechniken") wird nicht als Überschrift erkannt; ohne
+        # diese Prüfung erbt dann jeder Abschnitt von Kapitel 3 die letzte Marke
+        # aus Kapitel 2 als Elternebene, und der Index behauptet
+        # "2.3 … › 3.1.2 …". An echtem Material genau so passiert.
+        num = heading_number(m["title"])
+        if num:
+            while stack:
+                pnum = heading_number(stack[-1]["title"])
+                if pnum and (num + ".").startswith(pnum + "."):
+                    break          # echter Vorfahre: "3.1" trägt "3.1.2"
+                stack.pop()
+
         # Derselbe Titel zweimal (Outlines doppeln Kapitel gern als ersten
         # Abschnitt) darf nicht zu "X › X" werden.
         parents = [s["title"] for s in stack if s["title"] != m["title"]]
