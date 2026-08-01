@@ -24,6 +24,9 @@ Container in dieser Umgebung sind kurzlebig. Der Lernstand überlebt **nur**, we
 nach Git gepusht wird.
 
 - `ENGRAM_HOME` = `<engram-learning-checkout>/learning`, gesetzt vom SessionStart-Hook.
+  Die Variable kommt in der Bash-Umgebung von Cloud-Sessions nicht immer an — darum
+  vor dem ersten Engine-Aufruf `. .claude/hooks/engram-env.sh` sourcen, sonst
+  schreibt die Engine ins flüchtige `~/.claude/learning`.
 - Das Repo `karachay-b/engram-learning` ist **privat** — es enthält Freitext-Antworten,
   Bewertungen und ein Misconception-Log. Es gehört niemals in diesen öffentlichen Fork.
 - Den echten Pfad immer aus `python3 scripts/engram.py doctor` (Feld `home`) lesen.
@@ -64,6 +67,12 @@ ohne die Engine anzufassen.
   Upstream-Funktion kollidieren.
 - **Originale bleiben draußen.** `sources/.gitignore` hält PDFs aus dem Git. Der
   `sha256` im Manifest ist der Wiedervorlage-Check (`engram-source verify`).
+  **Dokumentierte Ausnahme:** `<engram-learning>/sources_raw/` liegt außerhalb von
+  `sources/` und wird bewusst mitversioniert — dort abgelegte Original-PDFs
+  überleben so den Container und stehen für `verify` und den Bild-Weg bei Scans
+  wieder zur Verfügung. Befüllt wird das Verzeichnis manuell (z. B. per
+  GitHub-Upload); der Stop-Hook committet es nicht. Das Repo ist privat — nur
+  deshalb ist das vertretbar.
 - **Nachschlagen statt laden:** Index lesen → `find` → 3–10 Chunks gezielt lesen.
   Kein Embedding-Index; bei ~40 Chunks pro Buch wäre er langsamer, undurchsichtig
   und müsste in jedem Container neu gebaut werden.

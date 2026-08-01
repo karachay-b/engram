@@ -12,7 +12,10 @@ Chunks — nicht das Buch.
 
 Das Werkzeug ist `$CLAUDE_PROJECT_DIR/.claude/tools/engram_source.py` (Fallback:
 `<repo-root>/.claude/tools/engram_source.py`). Es löst das private State-Repo selbst
-auf; `paths` zeigt, wohin es schreibt.
+auf; `paths` zeigt, wohin es schreibt. Es braucht kein `ENGRAM_HOME` — wer aber
+danach direkt `engram.py` aufruft (etwa `map-add`-Themen prüfen), sourct vorher
+`.claude/hooks/engram-env.sh`, sonst zeigt die Engine ins flüchtige
+`~/.claude/learning`.
 
 ```bash
 TOOL="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/tools/engram_source.py"
