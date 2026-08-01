@@ -24,6 +24,9 @@ Container in dieser Umgebung sind kurzlebig. Der Lernstand überlebt **nur**, we
 nach Git gepusht wird.
 
 - `ENGRAM_HOME` = `<engram-learning-checkout>/learning`, gesetzt vom SessionStart-Hook.
+  Die Variable kommt in der Bash-Umgebung von Cloud-Sessions nicht immer an — darum
+  vor dem ersten Engine-Aufruf `. .claude/hooks/engram-env.sh` sourcen, sonst
+  schreibt die Engine ins flüchtige `~/.claude/learning`.
 - Das Repo `karachay-b/engram-learning` ist **privat** — es enthält Freitext-Antworten,
   Bewertungen und ein Misconception-Log. Es gehört niemals in diesen öffentlichen Fork.
 - Den echten Pfad immer aus `python3 scripts/engram.py doctor` (Feld `home`) lesen.

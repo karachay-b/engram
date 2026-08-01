@@ -68,9 +68,10 @@ container-flüchtig und leer. Der Ausweg existiert bereits und ist eine Zeile:
 . .claude/hooks/engram-env.sh   # setzt ENGRAM_PROJECT, ENGRAM_STATE, ENGRAM_HOME
 ```
 
-Kleinster sinnvoller Fix, falls Andre ihn will: je **ein Satz** in den vier
-Alias-Skills und in `CLAUDE.md`, der vor jedem Engine-Aufruf das Sourcen von
-`engram-env.sh` vorschreibt. **Nicht**: Wrapper-Skripte, neue Hooks, Änderungen an
+**Behoben (2026-08-01, von Andre beauftragt):** je ein Satz in den vier
+Alias-Skills und in `CLAUDE.md` schreibt jetzt das Sourcen von `engram-env.sh`
+vor dem ersten Engine-Aufruf vor. Damit ist dieser Befund geschlossen — **nicht
+weiter ausbauen**: keine Wrapper-Skripte, keine neuen Hooks, keine Änderungen an
 der Engine oder am Env-Mechanismus der Plattform.
 
 ### B3 — Der State-Repo-Checkout steht in Task-Sessions auf dem Task-Branch

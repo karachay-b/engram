@@ -23,6 +23,9 @@ only a name that does not collide with Claude Code's built-in `/review`
 **Cloud specifics for this repository** — read `<root>/CLAUDE.md` for the full rules:
 
 - `ENGRAM_HOME` points into the private `engram-learning` checkout, not
+  `~/.claude/learning`. The variable often does not reach the Bash environment of
+  cloud sessions — source `<root>/.claude/hooks/engram-env.sh` before the first
+  engine call, or the engine silently falls back to the container-volatile
   `~/.claude/learning`. Take the real path from `python3 "$ENGRAM" doctor` (`home`
   field) and never print `~/.claude/learning` literally.
 - Learning state only survives this container if it is committed and pushed to the
