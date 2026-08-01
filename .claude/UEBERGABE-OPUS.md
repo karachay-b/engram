@@ -50,13 +50,12 @@ widerspricht dem dokumentierten Design („Originale bleiben draußen") — hat 
 einen nachvollziehbaren Grund: nur so überlebt das Original den Container, und
 `engram-source verify` sowie der Bild-Weg für Scans brauchen es gelegentlich wieder.
 
-**Das ist Andres Entscheidung, nicht deine.** Zwei ehrliche Optionen zur Vorlage:
-(a) bewusst behalten und in `CLAUDE.md` als dokumentierte Ausnahme nachtragen,
-(b) entfernen — was ein History-Rewrite des privaten Repos wäre, denn ein bloßes
-`git rm` nimmt die Datei nicht aus der Historie. **Nicht eigenmächtig löschen,
-nicht eigenmächtig die Historie umschreiben.** Der Stop-Hook committet
-`sources_raw/` übrigens nicht (nur `learning/` und `sources/`) — der Upload war
-ein manueller Weg, kein Hook-Verhalten.
+**Entschieden (2026-08-01): Andre behält das PDF bewusst.** Die Ausnahme ist in
+`CLAUDE.md` (Abschnitt „Quellen") dokumentiert: `sources_raw/` ist der manuelle,
+mitversionierte Ablageort für Originale im privaten Repo. Damit ist dieser Befund
+geschlossen — **nicht löschen, keine History umschreiben, kein Root-`.gitignore`
+nachrüsten.** Der Stop-Hook committet `sources_raw/` weiterhin nicht (nur
+`learning/` und `sources/`); Befüllung bleibt ein manueller Weg.
 
 ### B2 — `ENGRAM_HOME` kommt nicht in der Bash-Umgebung der Cloud-Session an
 

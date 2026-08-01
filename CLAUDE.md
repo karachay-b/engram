@@ -64,6 +64,12 @@ ohne die Engine anzufassen.
   Upstream-Funktion kollidieren.
 - **Originale bleiben draußen.** `sources/.gitignore` hält PDFs aus dem Git. Der
   `sha256` im Manifest ist der Wiedervorlage-Check (`engram-source verify`).
+  **Dokumentierte Ausnahme:** `<engram-learning>/sources_raw/` liegt außerhalb von
+  `sources/` und wird bewusst mitversioniert — dort abgelegte Original-PDFs
+  überleben so den Container und stehen für `verify` und den Bild-Weg bei Scans
+  wieder zur Verfügung. Befüllt wird das Verzeichnis manuell (z. B. per
+  GitHub-Upload); der Stop-Hook committet es nicht. Das Repo ist privat — nur
+  deshalb ist das vertretbar.
 - **Nachschlagen statt laden:** Index lesen → `find` → 3–10 Chunks gezielt lesen.
   Kein Embedding-Index; bei ~40 Chunks pro Buch wäre er langsamer, undurchsichtig
   und müsste in jedem Container neu gebaut werden.
