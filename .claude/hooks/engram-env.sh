@@ -4,6 +4,7 @@
 #
 # Sets, when it can:
 #   ENGRAM_PROJECT  absolute path of this engram checkout
+#   ENGRAM_ROOT     same path, exported — upstream's own escape hatch
 #   ENGRAM_STATE    absolute path of the engram-learning checkout (state repo)
 #   ENGRAM_HOME     $ENGRAM_STATE/learning  — what engram.py reads
 #
@@ -12,9 +13,36 @@
 # dies with it.
 
 # --- the engram checkout ------------------------------------------------------
-ENGRAM_PROJECT="${CLAUDE_PROJECT_DIR:-}"
-if [ -z "$ENGRAM_PROJECT" ] || [ ! -f "$ENGRAM_PROJECT/scripts/engram.py" ]; then
-  ENGRAM_PROJECT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd)"
+# First hit wins. Neither of the two signals this used to rely on is dependable:
+# $CLAUDE_PROJECT_DIR never reaches the Bash tool's environment, and `git rev-parse`
+# returns nothing when the session's working directory is the parent of both
+# checkouts (/home/user) rather than the repo itself. BASH_SOURCE stays high in the
+# list because it is exact whenever this file is sourced by path; the fixed paths at
+# the end are the backstop for that parent-directory case — same precedent as
+# engram_source.py:132, which hardcodes /home/user/engram-learning for the state repo.
+ENGRAM_PROJECT=""
+for _p in "${ENGRAM_ROOT:-}" \
+          "${CLAUDE_PROJECT_DIR:-}" \
+          "$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd)" \
+          "$PWD" \
+          "$(git rev-parse --show-toplevel 2>/dev/null)" \
+          "/home/user/engram" \
+          "$HOME/engram"; do
+  [ -n "$_p" ] || continue
+  if [ -f "$_p/scripts/engram.py" ]; then
+    ENGRAM_PROJECT="$(CDPATH= cd -- "$_p" 2>/dev/null && pwd)"
+    break
+  fi
+done
+unset _p
+
+# Upstream's resolver (skills/learn/SKILL.md) checks $ENGRAM_ROOT as its fourth
+# candidate and, on failure, tells the reader to set exactly this variable. Exporting
+# it here makes the unmodified upstream block resolve on its first real hit — no edit
+# to skills/, so `git merge upstream/main` stays conflict-free.
+if [ -n "$ENGRAM_PROJECT" ]; then
+  ENGRAM_ROOT="$ENGRAM_PROJECT"
+  export ENGRAM_ROOT ENGRAM_PROJECT
 fi
 
 # --- the state repo -----------------------------------------------------------
@@ -34,4 +62,5 @@ unset _c
 
 if [ -n "$ENGRAM_STATE" ]; then
   ENGRAM_HOME="$ENGRAM_STATE/learning"
+  export ENGRAM_STATE ENGRAM_HOME
 fi

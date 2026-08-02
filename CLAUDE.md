@@ -25,8 +25,10 @@ nach Git gepusht wird.
 
 - `ENGRAM_HOME` = `<engram-learning-checkout>/learning`, gesetzt vom SessionStart-Hook.
   Die Variable kommt in der Bash-Umgebung von Cloud-Sessions nicht immer an — darum
-  vor dem ersten Engine-Aufruf `. .claude/hooks/engram-env.sh` sourcen, sonst
-  schreibt die Engine ins flüchtige `~/.claude/learning`.
+  steht am Anfang jedes `engram-*`-Alias ein Bootstrap-Block, der das Checkout sucht
+  und `.claude/hooks/engram-env.sh` sourct. Ohne ihn schreibt die Engine ins
+  flüchtige `~/.claude/learning`. Den Block ausführen, nicht auf einen geratenen
+  Pfad verkürzen.
 - Das Repo `karachay-b/engram-learning` ist **privat** — es enthält Freitext-Antworten,
   Bewertungen und ein Misconception-Log. Es gehört niemals in diesen öffentlichen Fork.
 - Den echten Pfad immer aus `python3 scripts/engram.py doctor` (Feld `home`) lesen.
@@ -35,6 +37,26 @@ nach Git gepusht wird.
 Der Stop-Hook (`.claude/hooks/engram-save.sh`) committet und pusht automatisch nach
 jedem Turn. Meldet er einen fehlgeschlagenen Push, muss der Push manuell nachgeholt
 werden, bevor die Session endet.
+
+### Hooks laufen nicht in jeder Session
+
+`.claude/settings.json` — und damit **beide** Hooks — wird nur geladen, wenn das
+Projektverzeichnis der Session dieses Repo ist. Hängen `engram` und `engram-learning`
+gemeinsam an einer Session, ist das Projektverzeichnis der gemeinsame Elternordner
+(`/home/user`), und dann **feuert kein Engram-Hook**: kein `ENGRAM_HOME`, kein
+Auto-Save. Repo-Roots liefern `CLAUDE.md`, Skills und Subagents — Hooks liefern sie
+nicht.
+
+Deshalb darf sich nichts darauf verlassen, dass ein Hook gelaufen ist:
+
+- Der Bootstrap-Block der Alias-Skills setzt `ENGRAM_HOME` selbst und exportiert
+  zusätzlich `ENGRAM_ROOT`, worauf der unveränderte Upstream-Resolver anspringt.
+- Er erkennt am schon gesetzten `ENGRAM_HOME`, ob der SessionStart-Hook lief, und
+  warnt sichtbar, wenn nicht. Dann gilt: am Ende der Session einmal
+  `bash "$ENGRAM_ROOT/.claude/hooks/engram-save.sh"` von Hand ausführen.
+- Dauerhaft abstellen ließe sich das nur außerhalb des Repos — über das
+  Setup-Skript der Umgebung auf claude.ai, das die Hooks unabhängig vom
+  Projektverzeichnis registriert.
 
 ### Wenn das State-Repo fehlt
 
@@ -124,8 +146,13 @@ Alternativ der "Sync fork"-Button auf GitHub. Nach jedem Update den Selftest lau
 lassen — er ist die Gegenprobe, dass die Engine intakt ist.
 
 Ändert Upstream die Namen oder Frontmatter-Beschreibungen der Skills, müssen die
-`description`-Zeilen in `.claude/skills/engram-*/SKILL.md` nachgezogen werden; sie
-sind die einzige bewusste Duplizierung im Setup.
+`description`-Zeilen in `.claude/skills/engram-*/SKILL.md` nachgezogen werden.
+
+Zweite bewusste Duplizierung: der **Bootstrap-Block** steht wörtlich in allen vier
+Alias-Skills. Ein gemeinsamer Ort ginge nicht — der Block ist genau das Stück Code,
+das den gemeinsamen Ort erst findet. Upstream duplizert seinen eigenen Resolver aus
+demselben Grund über `skills/{learn,review,coach}/SKILL.md`. Wer den Block ändert,
+ändert ihn viermal.
 
 ## Tests
 

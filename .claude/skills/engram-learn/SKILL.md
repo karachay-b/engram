@@ -9,27 +9,54 @@ argument-hint: <topic> | continue
 This is a thin alias. The real skill is `skills/learn/SKILL.md` in this repository —
 kept unmodified so upstream updates (`git merge upstream/main`) never conflict.
 
-**Do this now, before anything else:**
+**Do this now, before anything else.** Run this block — it locates the checkout and
+loads the shared environment. Neither `$CLAUDE_PROJECT_DIR` (never reaches the Bash
+tool) nor `git rev-parse` (empty when the session's cwd is the parent of both
+checkouts) is dependable on its own, so do not shorten it to either:
 
-1. Resolve the repo root: `git rev-parse --show-toplevel` (or `$CLAUDE_PROJECT_DIR`).
-2. **Read `<root>/skills/learn/SKILL.md` in full.**
-3. Follow it verbatim, from its first instruction — including the engine-resolver
-   bash block, which must be run as written and not replaced by a guessed path.
+```bash
+_env=""
+for d in "${ENGRAM_ROOT:-}" "${CLAUDE_PROJECT_DIR:-}" "$PWD" \
+         "$(git rev-parse --show-toplevel 2>/dev/null)" /home/user/engram "$HOME/engram"; do
+  [ -n "$d" ] && [ -f "$d/.claude/hooks/engram-env.sh" ] && _env="$d/.claude/hooks/engram-env.sh" && break
+done
+if [ -z "$_env" ]; then
+  echo "engram: Checkout nicht gefunden — ENGRAM_ROOT auf das engram-Verzeichnis setzen." >&2
+else
+  _preset="${ENGRAM_HOME:-}"
+  . "$_env"
+  [ -n "$_preset" ] || echo "engram: WARNUNG — der Auto-Save-Hook läuft in dieser Session nicht. Am Ende 'bash $ENGRAM_ROOT/.claude/hooks/engram-save.sh' ausführen, sonst geht der Lernstand verloren." >&2
+fi
+echo "ENGRAM_ROOT=${ENGRAM_ROOT:-<leer>}  ENGRAM_HOME=${ENGRAM_HOME:-<leer>}"
+```
+
+The warning is precise, not a blanket disclaimer: `session-start.sh` publishes
+`ENGRAM_HOME` through `$CLAUDE_ENV_FILE`, so the variable arriving already set is proof
+that the hooks are registered — and its absence is proof that they are not.
+
+Then:
+
+1. **Read `$ENGRAM_ROOT/skills/learn/SKILL.md` in full.**
+2. Follow it verbatim, from its first instruction — including the engine-resolver
+   bash block, which must be run as written and not replaced by a guessed path. It
+   resolves on `$ENGRAM_ROOT`, which the block above exported.
 
 Do not summarize, paraphrase, or shortcut that file. It is the skill; this file is
 only a name that does not collide with the user's global `learn` skill.
 
-**Cloud specifics for this repository** — read `<root>/CLAUDE.md` for the full rules:
+**Cloud specifics for this repository** — read `$ENGRAM_ROOT/CLAUDE.md` for the full rules:
 
 - `ENGRAM_HOME` points into the private `engram-learning` checkout, not
-  `~/.claude/learning`. The variable often does not reach the Bash environment of
-  cloud sessions — source `<root>/.claude/hooks/engram-env.sh` before the first
-  engine call, or the engine silently falls back to the container-volatile
-  `~/.claude/learning`. Take the real path from `python3 "$ENGRAM" doctor` (`home`
-  field) and never print `~/.claude/learning` literally.
+  `~/.claude/learning`. The block above set it. If a later call runs in a shell that
+  lost it, re-run that block rather than guessing a path — the engine otherwise falls
+  back silently to the container-volatile `~/.claude/learning`. Take the real path
+  from `python3 "$ENGRAM" doctor` (`home` field) and never print `~/.claude/learning`
+  literally.
 - Learning state only survives this container if it is committed and pushed to the
-  `engram-learning` repo. The Stop hook does that automatically; if it reports a
-  failure, push manually before the session ends.
+  `engram-learning` repo. The Stop hook does that automatically **only where it is
+  registered**, which is not every session — the block above says so when it is not.
+  In that case run `bash "$ENGRAM_ROOT/.claude/hooks/engram-save.sh"` yourself before
+  the session ends. If the hook does run but reports a failed push, push manually.
 - Never put learner free-text on a shell command line. Write JSON with the Write
   tool and pass `--file`, or pipe to `--json -` / `--production-file -`.
 
@@ -80,7 +107,7 @@ Bortz", "das PDF, das ich eingebunden habe"). Ohne Nennung ändert sich nichts �
 es wird nicht automatisch nach passenden Quellen gesucht.
 
 ```bash
-TOOL="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/tools/engram_source.py"
+TOOL="$ENGRAM_ROOT/.claude/tools/engram_source.py"   # aus dem Block ganz oben
 python3 "$TOOL" list          # welcher Slug ist gemeint?
 python3 "$TOOL" show <slug>   # Index, um Scope und Kapitel zu bestätigen
 ```
