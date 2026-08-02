@@ -56,6 +56,31 @@ def note(msg):
     sys.stderr.write("engram-source: %s\n" % msg)
 
 
+def warn_if_interests_empty(state):
+    """Ein Ingest ist fast immer der Auftakt zu einem neuen Thema — und genau dort
+    wird die Interessen-Frage aus dem Intake verschluckt (das Aufmerksamkeitsbudget
+    steckt im Index und in den Seitenmarkern). Ohne Interessen baut der Architect
+    still ein Thema ohne Analogien: nichts bricht, nichts warnt, es wird nur
+    unpersönlicher. Also hier eine Zeile echter Werkzeugausgabe statt Prosa, die
+    schon einmal überlesen wurde.
+
+    Schluckt jeden Fehler. Ein Ingest darf daran nie scheitern — dieselbe Hausregel
+    wie in den Hooks.
+    """
+    try:
+        home = os.environ.get("ENGRAM_HOME") or os.path.join(state, "learning")
+        with open(os.path.join(home, "learner-model.json"), encoding="utf-8") as fh:
+            model = json.load(fh)
+        if model.get("interests"):
+            return
+        note("learner-model: `interests` ist leer. Vor dem Themenaufbau nach 2–3 "
+             "Interessen fragen und mit `engram.py model --add-interest \"…\"` "
+             "speichern — sonst baut der Curriculum-Architect ein Thema ohne "
+             "Analogien.")
+    except Exception:
+        pass
+
+
 def _pip(*packages):
     return subprocess.call(
         [sys.executable, "-m", "pip", "install", "--quiet"] + list(packages),
@@ -919,7 +944,8 @@ def cmd_add(args):
     big = sum(1 for r in rows if r["words"] > MAX_WORDS)
     if small or big:
         note("außerhalb des Zielbands: %d zu klein, %d zu groß" % (small, big))
-    print(idx)
+    warn_if_interests_empty(state)
+    print(idx)   # bleibt die letzte Zeile: der maschinenlesbare Rückgabewert
 
 
 def cmd_list(args):

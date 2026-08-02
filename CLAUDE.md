@@ -81,10 +81,20 @@ ohne die Engine anzufassen.
 
 **Die Rolle des Buchs ist Inhalt, nicht Gliederung.** Der Curriculum-Architect nennt
 Kapitel-Kopieren seinen kardinalen Fehler; der Spawn-Baustein im `engram-learn`-Alias
-stellt das scharf. Das ist die **eine bewusste Kopplung an Upstream**: Ändert der
-Upstream die Rollenbeschreibung des Architects grundlegend, muss dieser Baustein
-nachgezogen werden — dieselbe Klasse von Duplizierung wie die `description`-Zeilen
-der Alias-Skills.
+stellt das scharf.
+
+**Interessen sind Vorbedingung, nicht Kür.** Der Quellen-Pfad verschluckt die
+Intake-Frage nach den Interessen des Lernenden besonders leicht: Ingest, Index und
+Seitenmarker verbrauchen genau das Aufmerksamkeitsbudget, in dem sie gestellt werden
+müsste, und ein leeres `interests` scheitert still — der Architect baut klaglos
+`analogous_to: []`. Deshalb steht das Gate im `engram-learn`-Alias
+(`## Pflicht-Gate vor dem Architect-Spawn`), und `engram_source.py` sowie der
+SessionStart-Hook melden ein leeres Feld in echter Werkzeugausgabe.
+
+Beides sind die **bewussten Kopplungen an Upstream**: Ändert der Upstream die
+Rollenbeschreibung des Architects grundlegend oder Intake-Schritt 3 / das
+`--add-interest`-Flag, müssen Spawn-Baustein und Gate nachgezogen werden —
+dieselbe Klasse von Duplizierung wie die `description`-Zeilen der Alias-Skills.
 
 Der Stop-Hook committet `sources/` zusammen mit `learning/`. Rechtlich gilt: Die
 Derivate eines geschützten Buchs sind ebenso geschützt — sie gehören ins private

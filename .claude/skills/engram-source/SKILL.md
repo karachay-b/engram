@@ -71,7 +71,10 @@ Seitenverweise.
 4. **Stichprobe.** Einen Chunk lesen und drei `[S. n]`-Marker gegen das Original
    prüfen (Read mit `pages`). Stimmt die Seitenzahl, stimmt der ganze Mechanismus.
 5. Danach `/engram-learn <thema>` und die Quelle **beim Namen nennen** — der
-   Lernskill hat dafür einen eigenen Abschnitt.
+   Lernskill hat dafür einen eigenen Abschnitt. Dort gilt das **Interessen-Gate**:
+   Ist `interests` im learner-model leer, wird zuerst danach gefragt und erst dann
+   der Architect gespawnt. Der Ingest oben verbraucht genau das Aufmerksamkeits-
+   budget, in dem diese Frage sonst untergeht — deshalb steht sie hier nochmal.
 
 ## Was in den Chunks steht
 
