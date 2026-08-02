@@ -12,6 +12,24 @@
 # MUST NEVER FAIL A SESSION — every path ends in exit 0.
 set -u
 
+# --- 0. registration marker ---------------------------------------------------
+# Proof that the Engram hooks are registered in THIS session, published into the
+# session environment so the alias bootstraps can test it. If this hook runs at
+# all, the Stop hook is registered too — they come from the same settings file —
+# and the auto-save works.
+#
+# Written FIRST, before any resolution: the marker is about hook registration,
+# not about whether a checkout was found. Written unconditionally rather than
+# only on success, for the same reason.
+#
+# Why not reuse ENGRAM_HOME as the signal: it is also set by the alias bootstrap
+# itself and can be supplied as a plain environment variable in the cloud
+# environment's settings. Either would make an unregistered session look
+# registered and silently suppress the manual-save warning — the one warning
+# that stands between the learner and a lost session.
+[ -n "${CLAUDE_ENV_FILE:-}" ] && echo 'export ENGRAM_HOOKS_ACTIVE=1' >> "$CLAUDE_ENV_FILE"
+export ENGRAM_HOOKS_ACTIVE=1
+
 HOOK_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
 # shellcheck source=engram-env.sh
 . "$HOOK_DIR/engram-env.sh" 2>/dev/null || exit 0

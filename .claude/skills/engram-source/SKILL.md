@@ -19,22 +19,30 @@ nicht auf eines von beiden verkürzen:
 _env=""
 for d in "${ENGRAM_ROOT:-}" "${CLAUDE_PROJECT_DIR:-}" "$PWD" \
          "$(git rev-parse --show-toplevel 2>/dev/null)" /home/user/engram "$HOME/engram"; do
-  [ -n "$d" ] && [ -f "$d/.claude/hooks/engram-env.sh" ] && _env="$d/.claude/hooks/engram-env.sh" && break
+  [ -n "$d" ] || continue
+  # Beide Marker verlangt: Ein Verzeichnis ist nur dann ein engram-Checkout, wenn
+  # es auch die Engine trägt. Nur auf den Hook-Pfad hin zu sourcen würde ausführen,
+  # was ein fremdes Repo zufällig unter diesem Namen mitbringt.
+  [ -f "$d/scripts/engram.py" ] && [ -f "$d/.claude/hooks/engram-env.sh" ] || continue
+  _env="$d/.claude/hooks/engram-env.sh"; break
 done
 if [ -z "$_env" ]; then
   echo "engram: Checkout nicht gefunden — ENGRAM_ROOT auf das engram-Verzeichnis setzen." >&2
 else
-  _preset="${ENGRAM_HOME:-}"
+  _hooks="${ENGRAM_HOOKS_ACTIVE:-}"
   . "$_env"
-  [ -n "$_preset" ] || echo "engram: WARNUNG — der Auto-Save-Hook läuft in dieser Session nicht. Am Ende 'bash $ENGRAM_ROOT/.claude/hooks/engram-save.sh' ausführen, sonst gehen Quellen und Lernstand verloren." >&2
+  [ -n "$_hooks" ] || echo "engram: WARNUNG — der Auto-Save-Hook läuft in dieser Session nicht. Am Ende 'bash $ENGRAM_ROOT/.claude/hooks/engram-save.sh' ausführen, sonst gehen Quellen und Lernstand verloren." >&2
+  TOOL="$ENGRAM_ROOT/.claude/tools/engram_source.py"
+  [ -f "$TOOL" ] && python3 "$TOOL" paths
 fi
-TOOL="$ENGRAM_ROOT/.claude/tools/engram_source.py"
-python3 "$TOOL" paths
 ```
 
 Die Warnung ist keine pauschale Absicherung: `session-start.sh` veröffentlicht
-`ENGRAM_HOME` über `$CLAUDE_ENV_FILE`. Kommt die Variable schon gesetzt an, sind die
-Hooks registriert; fehlt sie, sind sie es nicht.
+`ENGRAM_HOOKS_ACTIVE` über `$CLAUDE_ENV_FILE`, noch bevor es irgendetwas auflöst.
+Kommt die Variable gesetzt an, sind die Hooks registriert — und weil beide aus
+derselben Settings-Datei stammen, läuft dann auch der Auto-Save. `ENGRAM_HOME` taugt
+dafür nicht: Der Bootstrap setzt es selbst, und es kann auch schlicht als
+Umgebungsvariable gesetzt sein.
 
 Das Werkzeug löst das private State-Repo selbst auf; `paths` zeigt, wohin es
 schreibt. Es braucht kein `ENGRAM_HOME` — wer aber danach direkt `engram.py` aufruft

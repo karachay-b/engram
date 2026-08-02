@@ -51,9 +51,14 @@ Deshalb darf sich nichts darauf verlassen, dass ein Hook gelaufen ist:
 
 - Der Bootstrap-Block der Alias-Skills setzt `ENGRAM_HOME` selbst und exportiert
   zusätzlich `ENGRAM_ROOT`, worauf der unveränderte Upstream-Resolver anspringt.
-- Er erkennt am schon gesetzten `ENGRAM_HOME`, ob der SessionStart-Hook lief, und
-  warnt sichtbar, wenn nicht. Dann gilt: am Ende der Session einmal
-  `bash "$ENGRAM_ROOT/.claude/hooks/engram-save.sh"` von Hand ausführen.
+- Ob die Hooks registriert sind, erkennt er an `ENGRAM_HOOKS_ACTIVE`. Das setzt
+  `session-start.sh` als Allererstes über `$CLAUDE_ENV_FILE`, noch vor jeder
+  Auflösung — der Marker sagt also „ein Hook lief", nicht „ein Checkout wurde
+  gefunden". Fehlt er, warnt der Block sichtbar, und dann gilt: am Ende der Session
+  einmal `bash "$ENGRAM_ROOT/.claude/hooks/engram-save.sh"` von Hand ausführen.
+  `ENGRAM_HOME` taugt als Signal **nicht** — der Bootstrap setzt es selbst, und es
+  kann als schlichte Umgebungsvariable gesetzt sein; beides würde die Warnung genau
+  dann verschlucken, wenn sie gebraucht wird.
 - Dauerhaft behoben wird es nur außerhalb des Repos: Eine `~/.claude/settings.json`
   im Container wird unabhängig vom Projektverzeichnis gelesen, und dorthin
   geschrieben wird sie vom **Setup-Skript der Umgebung**. Die maßgebliche Fassung

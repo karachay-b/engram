@@ -18,21 +18,29 @@ checkouts) is dependable on its own, so do not shorten it to either:
 _env=""
 for d in "${ENGRAM_ROOT:-}" "${CLAUDE_PROJECT_DIR:-}" "$PWD" \
          "$(git rev-parse --show-toplevel 2>/dev/null)" /home/user/engram "$HOME/engram"; do
-  [ -n "$d" ] && [ -f "$d/.claude/hooks/engram-env.sh" ] && _env="$d/.claude/hooks/engram-env.sh" && break
+  [ -n "$d" ] || continue
+  # Beide Marker verlangt: Ein Verzeichnis ist nur dann ein engram-Checkout, wenn
+  # es auch die Engine trägt. Nur auf den Hook-Pfad hin zu sourcen würde ausführen,
+  # was ein fremdes Repo zufällig unter diesem Namen mitbringt.
+  [ -f "$d/scripts/engram.py" ] && [ -f "$d/.claude/hooks/engram-env.sh" ] || continue
+  _env="$d/.claude/hooks/engram-env.sh"; break
 done
 if [ -z "$_env" ]; then
   echo "engram: Checkout nicht gefunden — ENGRAM_ROOT auf das engram-Verzeichnis setzen." >&2
 else
-  _preset="${ENGRAM_HOME:-}"
+  _hooks="${ENGRAM_HOOKS_ACTIVE:-}"
   . "$_env"
-  [ -n "$_preset" ] || echo "engram: WARNUNG — der Auto-Save-Hook läuft in dieser Session nicht. Am Ende 'bash $ENGRAM_ROOT/.claude/hooks/engram-save.sh' ausführen, sonst geht der Lernstand verloren." >&2
+  [ -n "$_hooks" ] || echo "engram: WARNUNG — der Auto-Save-Hook läuft in dieser Session nicht. Am Ende 'bash $ENGRAM_ROOT/.claude/hooks/engram-save.sh' ausführen, sonst geht der Lernstand verloren." >&2
 fi
 echo "ENGRAM_ROOT=${ENGRAM_ROOT:-<leer>}  ENGRAM_HOME=${ENGRAM_HOME:-<leer>}"
 ```
 
 The warning is precise, not a blanket disclaimer: `session-start.sh` publishes
-`ENGRAM_HOME` through `$CLAUDE_ENV_FILE`, so the variable arriving already set is proof
-that the hooks are registered — and its absence is proof that they are not.
+`ENGRAM_HOOKS_ACTIVE` through `$CLAUDE_ENV_FILE` before it resolves anything, so the
+variable arriving already set proves the hooks are registered — and both hooks come
+from the same settings file, so it proves the auto-save runs. `ENGRAM_HOME` would not:
+the bootstrap sets it itself, and it can also be supplied as a plain environment
+variable, either of which would suppress the warning in a session that needs it.
 
 Then:
 

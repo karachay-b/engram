@@ -102,12 +102,41 @@ cat > "$NEW" <<'JSON'
 }
 JSON
 
-# Vorhandene Schlüssel nicht zerstören, falls dort schon etwas steht.
-if [ -s "$CLAUDE_DIR/settings.json" ] && jq empty "$CLAUDE_DIR/settings.json" 2>/dev/null; then
-  jq -s '.[0] * .[1]' "$CLAUDE_DIR/settings.json" "$NEW" > "$CLAUDE_DIR/settings.json.tmp" \
-    && mv "$CLAUDE_DIR/settings.json.tmp" "$CLAUDE_DIR/settings.json"
-else
+# Vorhandene Registrierungen erhalten.
+#
+# `jq '.[0] * .[1]'` täte das NICHT: Der Multiplikations-Operator verschmilzt zwar
+# Objekte rekursiv, ersetzt Arrays aber komplett. Ein bereits eingetragener
+# SessionStart- oder Stop-Hook — etwa aus einem anderen Setup derselben Umgebung —
+# verschwände damit wortlos. Deshalb werden die Arrays pro Event aneinandergehängt
+# und dabei entdoppelt, damit ein zweiter Lauf des Setup-Skripts den Engram-Eintrag
+# nicht verdoppelt.
+if [ ! -s "$CLAUDE_DIR/settings.json" ]; then
   cp "$NEW" "$CLAUDE_DIR/settings.json"
+elif ! command -v jq >/dev/null 2>&1; then
+  # Fail closed: lieber ohne Auto-Save weiterlaufen als eine fremde Konfiguration
+  # überschreiben. Die Alias-Skills warnen dann sichtbar, dass der Hook fehlt.
+  echo "engram-setup: jq fehlt — ~/.claude/settings.json bleibt unangetastet." >&2
+elif ! jq empty "$CLAUDE_DIR/settings.json" 2>/dev/null; then
+  # Kaputtes JSON nicht stillschweigend wegwerfen: beiseitelegen, dann neu schreiben.
+  cp "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.json.bak.$(date +%s)" 2>/dev/null || true
+  echo "engram-setup: ~/.claude/settings.json war kein gültiges JSON — Sicherung angelegt." >&2
+  cp "$NEW" "$CLAUDE_DIR/settings.json"
+else
+  if jq -s '
+        def merge_event($old; $new):
+          (($old // []) + ($new // [])) | unique_by(tojson);
+        .[0] as $a | .[1] as $b
+        | $a
+        | .hooks = (($a.hooks // {}) + ($b.hooks // {}))
+        | .hooks.SessionStart = merge_event($a.hooks.SessionStart; $b.hooks.SessionStart)
+        | .hooks.Stop         = merge_event($a.hooks.Stop;         $b.hooks.Stop)
+      ' "$CLAUDE_DIR/settings.json" "$NEW" > "$CLAUDE_DIR/settings.json.tmp" 2>/dev/null \
+     && [ -s "$CLAUDE_DIR/settings.json.tmp" ]; then
+    mv "$CLAUDE_DIR/settings.json.tmp" "$CLAUDE_DIR/settings.json"
+  else
+    rm -f "$CLAUDE_DIR/settings.json.tmp"
+    echo "engram-setup: Merge fehlgeschlagen — ~/.claude/settings.json bleibt unangetastet." >&2
+  fi
 fi
 rm -f "$NEW"
 

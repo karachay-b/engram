@@ -40,9 +40,17 @@ unset _p
 # candidate and, on failure, tells the reader to set exactly this variable. Exporting
 # it here makes the unmodified upstream block resolve on its first real hit — no edit
 # to skills/, so `git merge upstream/main` stays conflict-free.
+#
+# On failure the inherited values must be CLEARED, not left standing. An
+# ENGRAM_ROOT or ENGRAM_HOME carried in from the environment would otherwise
+# survive a failed resolution and point the engine at a checkout this session
+# never validated — and engram.py writes learning state to wherever ENGRAM_HOME
+# says. Failing to resolve must look like "no engram here", not like a stale hit.
 if [ -n "$ENGRAM_PROJECT" ]; then
   ENGRAM_ROOT="$ENGRAM_PROJECT"
   export ENGRAM_ROOT ENGRAM_PROJECT
+else
+  unset ENGRAM_ROOT ENGRAM_HOME 2>/dev/null || true
 fi
 
 # --- the state repo -----------------------------------------------------------
@@ -60,7 +68,12 @@ for _c in "${ENGRAM_STATE_REPO:-}" \
 done
 unset _c
 
+# Same rule as above: no state repo means no ENGRAM_HOME. Leaving an inherited
+# one in place would send the engine's writes to a checkout that is not the one
+# this resolution found — silently, and with the learner's data.
 if [ -n "$ENGRAM_STATE" ]; then
   ENGRAM_HOME="$ENGRAM_STATE/learning"
   export ENGRAM_STATE ENGRAM_HOME
+else
+  unset ENGRAM_HOME 2>/dev/null || true
 fi
