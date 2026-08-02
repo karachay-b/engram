@@ -33,6 +33,46 @@ only a name that does not collide with the user's global `learn` skill.
 - Never put learner free-text on a shell command line. Write JSON with the Write
   tool and pass `--file`, or pipe to `--json -` / `--production-file -`.
 
+## Pflicht-Gate vor dem Architect-Spawn: Interessen
+
+Gilt für **jeden** neuen Themenaufbau, mit Quelle oder ohne.
+
+```bash
+python3 "$ENGRAM" model        # Feld `interests` ansehen
+```
+
+Ist `interests` leer, **jetzt** fragen — 2–3 Dinge, die der Lernende liebt,
+beliebige Domäne — und schreiben, ein Flag pro Interesse:
+
+```bash
+python3 "$ENGRAM" model --add-interest "…" --add-interest "…"
+```
+
+Erst danach den **engram-curriculum-architect** spawnen. Das ist Intake-Schritt 3
+aus `skills/learn/SKILL.md` §1 — hier als Vorbedingung wiederholt, weil er in der
+Praxis übersprungen wird.
+
+**Warum als Gate und nicht als Erinnerung:** Ein leeres `interests` scheitert
+**still**. Der Architect formuliert die Personalisierung permissiv („where an
+`analogous_to` edge or example *can* live in the learner's stated interests",
+`agents/engram-curriculum-architect.md:22`) — ohne Interessen baut er klaglos
+`analogous_to: []`, und die Analogie-Beats der Dialog-Grammatik laufen ins Leere:
+beat 1 OPEN A GAP („frame it from their goal or interests") und beat 6 CONNECT
+(„pull `analogous_to` toward their interests"), `skills/_shared/dialogue-grammar.md`.
+Nichts bricht, nichts warnt — das Thema ist einfach unpersönlicher, und das fällt
+erst Wochen später beim Behalten auf.
+
+**Der Beleg steht in diesem Repo:** Das Thema `problemtrance-unterbrechen` wurde
+über den Quellen-Pfad ohne Interessen gebaut. Von 18 Nodes hat genau einer eine
+Analogie; 17 haben `analogous_to: []`.
+
+**Shell-Sicherheit:** Interessen sind Lernertext, und `--add-interest` hat — anders
+als `rate` oder `add-topic` — **keinen Datei-Kanal**. Ein Interesse ist normalerweise
+ein Wort („Klettern", „Jazz"); enthält die Antwort `'`, `"`, `` ` `` oder `$(…)`,
+nicht durchreichen, sondern auf eine schlichte Nennung eindampfen und die dem
+Lernenden kurz bestätigen lassen. Die Regel aus `skills/learn/SKILL.md` gilt
+unverändert: ein `$(…)` in einer Antwort würde sonst ausgeführt.
+
 ## Quellen — wenn der Lernstoff aus einem Buch kommt
 
 Greift **nur**, wenn der Lernende beim Themenaufbau eine Quelle nennt ("aus dem
@@ -48,8 +88,10 @@ python3 "$TOOL" show <slug>   # Index, um Scope und Kapitel zu bestätigen
 Ist noch nichts ingestet, führt `/engram-source` durch das Einbinden. Erst danach
 weiter — der Architect bekommt Chunks, nie ein rohes PDF.
 
-**Der Spawn-Baustein.** Beim Spawn des **engram-curriculum-architect** zusätzlich zu
-Thema, Ziel, Deadline, Vorwissen und Interessen wörtlich mitgeben:
+**Der Spawn-Baustein.** Das Interessen-Gate oben ist Vorbedingung — dieser Baustein
+setzt es nicht als erledigt voraus, sondern verlangt es. Beim Spawn des
+**engram-curriculum-architect** zusätzlich zu Thema, Ziel, Deadline, Vorwissen und
+den dort erfassten Interessen wörtlich mitgeben:
 
 > **Quelle.** Index: `<sources>/<slug>/index.md`, Chunks: `<sources>/<slug>/chunks/`.
 > Scope: `<kapitel/seiten>`.

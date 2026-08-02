@@ -43,6 +43,31 @@ python3 "$ENGRAM_PROJECT/scripts/engram.py" init >/dev/null 2>&1
 python3 "$ENGRAM_PROJECT/scripts/engram.py" session-start 2>/dev/null \
   | sed -E 's#/(learn|review|coach)\b#/engram-\1#g' || true
 
+# --- 3b. interests gate ---------------------------------------------------------
+# Topics exist but `interests` is empty: that combination is the signature of a
+# skipped intake step 3 — the architect built at least one topic with no analogy
+# fuel. A fresh state with no topics must stay quiet, or the warning becomes noise
+# on the very first session. Non-fatal like everything else here.
+# ENGRAM_HOME is unset when no state repo is attached (engram-env.sh:35-37) — then
+# the engine reads its own default, so check that instead. `set -u` is on: never
+# expand ENGRAM_HOME bare.
+python3 - "${ENGRAM_HOME:-$HOME/.claude/learning}" <<'PY' 2>/dev/null || true
+import json, os, sys
+home = sys.argv[1]
+try:
+    with open(os.path.join(home, "learner-model.json"), encoding="utf-8") as fh:
+        if json.load(fh).get("interests"):
+            sys.exit(0)
+    graphs = os.path.join(home, "graphs")
+    if not any(f.endswith(".json") for f in os.listdir(graphs)):
+        sys.exit(0)
+except Exception:
+    sys.exit(0)
+print("engram: `interests` im learner-model ist leer, obwohl schon Themen existieren "
+      "— neue Themen bekommen so keine Analogien. `model --add-interest` beim "
+      "nächsten /engram-learn nachholen.")
+PY
+
 # --- 4. node deps (non-fatal; the container image caches this) -----------------
 # --no-save: bun.lock is currently out of sync with package.json upstream, and a
 # rewrite would leave every session with a dirty tree and a future merge conflict.
