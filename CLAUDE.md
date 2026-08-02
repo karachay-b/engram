@@ -54,9 +54,19 @@ Deshalb darf sich nichts darauf verlassen, dass ein Hook gelaufen ist:
 - Er erkennt am schon gesetzten `ENGRAM_HOME`, ob der SessionStart-Hook lief, und
   warnt sichtbar, wenn nicht. Dann gilt: am Ende der Session einmal
   `bash "$ENGRAM_ROOT/.claude/hooks/engram-save.sh"` von Hand ausführen.
-- Dauerhaft abstellen ließe sich das nur außerhalb des Repos — über das
-  Setup-Skript der Umgebung auf claude.ai, das die Hooks unabhängig vom
-  Projektverzeichnis registriert.
+- Dauerhaft behoben wird es nur außerhalb des Repos: Eine `~/.claude/settings.json`
+  im Container wird unabhängig vom Projektverzeichnis gelesen, und dorthin
+  geschrieben wird sie vom **Setup-Skript der Umgebung**. Die maßgebliche Fassung
+  steht versioniert in `.claude/cloud-setup.sh` — sie wird vom Repo nicht
+  ausgeführt, sondern auf claude.ai in das Feld „Setup script" kopiert
+  (Umgebungs-Selektor über dem Eingabefeld → Zahnrad). Wirksam wird eine Änderung
+  erst beim nächsten Aufbau des Umgebungs-Caches, also nicht in einer schon
+  laufenden Session.
+
+Der Repo-Hook bleibt trotzdem stehen: In Sessions, deren Projektverzeichnis
+wirklich dieses Repo ist, greift er weiter, und er ist der einzige Weg, der ohne
+die Cloud-Umgebung funktioniert — etwa lokal im Terminal. Feuern beide, ist das
+harmlos; der zweite Lauf von `engram-save.sh` findet einen sauberen Baum.
 
 ### Wenn das State-Repo fehlt
 
