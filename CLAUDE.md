@@ -73,6 +73,15 @@ wirklich dieses Repo ist, greift er weiter, und er ist der einzige Weg, der ohne
 die Cloud-Umgebung funktioniert — etwa lokal im Terminal. Feuern beide, ist das
 harmlos; der zweite Lauf von `engram-save.sh` findet einen sauberen Baum.
 
+**Dasselbe Problem trifft Subagents, und dort hilft kein Hook.** Architect, Assessor und
+Artifact-Smith starten mit frischem Kontext in eigener Bash-Umgebung; der Resolver aus
+`skills/learn/SKILL.md` greift dort ins Leere, sobald das Arbeitsverzeichnis der
+Elternordner beider Checkouts ist. Deshalb verlangt der `engram-learn`-Alias, dass
+`ENGRAM_ROOT` und `ENGRAM_HOME` in **jedem** Spawn-Prompt wörtlich als Text stehen.
+Gemessen am 2026-08-03: Der Artifact-Smith fand die Engine nur über den Pfad aus seinem
+Prompt — ohne ihn wäre `artifact set` ins flüchtige `~/.claude/learning` gelaufen, mit
+`ok` in der Ausgabe und der Registrierung am falschen Ort.
+
 ### Wenn das State-Repo fehlt
 
 Der SessionStart-Hook warnt sichtbar, wenn kein `engram-learning`-Checkout gefunden
@@ -147,17 +156,25 @@ Dafür steht im `engram-learn`-Alias ein zweiter Spawn-Baustein
 (`## Recherche — wenn keine Quelle genannt wurde`), der **nicht** das ganze Thema
 recherchiert, sondern drei Node-Klassen belegt: `arbitrary`/`fact` (nicht ableitbar),
 `threshold` (Fehler vergiften alles danach) und den `error_bank`-Katalog. Budget:
-3–6 Abrufe. Ableitbare `concept`-Nodes bleiben unbelegt — die Ableitung ist die Prüfung.
+höchstens 6 Netzwerkaufrufe, Verbrauch wird zurückgemeldet. Ableitbare `concept`-Nodes
+bleiben unbelegt — die Ableitung ist die Prüfung; ein ableitbarer `threshold`-Node auch,
+dann aber ausdrücklich vermerkt.
 
 Drei Entscheidungen, die dahinter stehen:
 
-- **Nur abgerufene Belege**, URL plus wörtliches Zitat. Literaturangaben aus dem
-  Gedächtnis sind verboten: die gemessenen Raten erfundener Zitate liegen über
-  ausgelieferte Modelle bei 11–57 %, und ein erfundener Beleg ist schlechter als
-  keiner, weil er Prüfbarkeit vortäuscht.
+- **Zwei Belegstufen, ehrlich getrennt.** `A` = Volltext abgerufen, wörtlich zitiert —
+  nur das ist ein Nachweis. `B` = Suchergebnis-Snippet, Seite nicht abrufbar; wird
+  protokolliert und zählt **nirgends** als geprüft. Literaturangaben aus dem Gedächtnis
+  sind in beiden Stufen verboten: die gemessenen Raten erfundener Zitate liegen über
+  ausgelieferte Modelle bei 11–57 %, und ein erfundener Beleg ist schlechter als keiner,
+  weil er Prüfbarkeit vortäuscht. Die Stufe B existiert, weil der erste reale Lauf
+  (2026-08-03) auf 3 von 3 Fundstellen HTTP 403 bekam — der Agent-Proxy dieser Umgebung
+  blockt viele Hosts, und eine Regel mit nur einem erlaubten Ausgang wird dann entweder
+  gebrochen oder liefert nichts.
 - **Nachgelagert, nie davor.** Der Architect läuft gemessen ~7 Minuten still, und das
   ist laut Upstream-Skill der wahrscheinlichste Abbruchmoment. Ein Budget ohne Deckel
-  würde genau die Stelle verlängern, die am wenigsten trägt.
+  würde genau die Stelle verlängern, die am wenigsten trägt. Mit Deckel gemessen:
+  6 Nodes inklusive Recherche in 5,5 Minuten.
 - **Ablage neben dem Graphen**, nicht darin: `sources/RESEARCH/<topic>.md`, geschrieben
   mit dem Write-Tool. Der Architect liefert die Belege unter dem Top-Level-Schlüssel
   `research`; der wird **vor** `add-topic` aus dem Payload genommen. `list` und
