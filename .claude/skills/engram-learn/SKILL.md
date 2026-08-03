@@ -152,6 +152,11 @@ den dort erfassten Interessen wörtlich mitgeben:
 python3 "$TOOL" map-add --topic <topic-slug> --source <slug> --chunks <A-B>
 ```
 
+Steht das Paar (Thema, Quelle) schon mit anderer Chunk-Angabe da — etwa nach einem
+`add-topic --extend` —, bricht das Kommando ab und verlangt `--replace`. Das ist
+kein Fehler, sondern die Frage, ob die Zeile ersetzt (dann `--replace`) oder ein
+zweites Thema gemeint war (dann ein anderer `--topic`).
+
 **Shell-Sicherheit, verschärft:** Chunk-Text nie auf die Kommandozeile. Die Regel aus
 `skills/learn/SKILL.md` nennt genau diesen Fall ("in a document they asked you to
 teach") — mit echten Buchauszügen ist er nicht mehr hypothetisch.

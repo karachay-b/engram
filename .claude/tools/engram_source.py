@@ -677,8 +677,18 @@ def yaml_list(items):
     return "[%s]" % ", ".join('"%s"' % str(i).replace('"', "'") for i in items)
 
 
+def norm(text):
+    """Der Zellwert, wie er gemeint ist — ohne Escaping.
+
+    Getrennt von `cell()`, weil MAP.md nicht nur geschrieben, sondern auch gelesen
+    und verglichen wird: verglichen wird gegen den gemeinten Wert, escapt erst beim
+    Schreiben. Beides in einer Funktion hieße, `a|b` mit `a\\|b` zu vergleichen.
+    """
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def cell(text):
-    return re.sub(r"\s+", " ", text).replace("|", "\\|").strip()
+    return norm(text).replace("|", "\\|")
 
 
 def write_source(state, slug, meta, doc, spans, sections, pdf_path, keep_pdf):
@@ -1042,33 +1052,221 @@ def cmd_verify(args):
     sys.exit(1)
 
 
-def cmd_map_add(args):
-    """Die einzige dauerhafte Verbindung Lernstand ↔ Quelle.
+# --------------------------------------------------------------------------- #
+# MAP.md — die einzige dauerhafte Verbindung Lernstand ↔ Quelle
+# --------------------------------------------------------------------------- #
+#
+# Als Kommandos und nicht als Handarbeit im Skill, weil ein Modell beim Editieren
+# einer Tabelle zuverlässig irgendwann die Spaltenzahl verfehlt. Sobald aber ein
+# Kommando Zeilen SUCHT statt schreibt, müssen Schreiber und Leser dasselbe Format
+# meinen — deshalb steht es hier an einer Stelle und nicht als Format-String in
+# jedem Kommando.
 
-    Als Kommando und nicht als Handarbeit im Skill, weil ein Modell beim Editieren
-    einer Tabelle zuverlässig irgendwann die Spaltenzahl verfehlt.
+MAP_INTRO = ("# Quellen ↔ Themen\n\n"
+             "Welches Engram-Thema aus welcher Quelle gebaut wurde. Das "
+             "Node-Schema hat kein Quellenfeld — diese Tabelle ist der "
+             "Ersatz.\n\n"
+             "| Thema | Quelle | Chunks | Datum |\n|---|---|---|---|\n")
+
+NO_CHUNKS = "—"
+
+
+def map_path(state):
+    return os.path.join(sources_dir(state), "MAP.md")
+
+
+def map_row(topic, source, chunks, date=None):
+    """Die eine Stelle, die weiß, wie eine Zeile aussieht.
+
+    `cell()` ist dasselbe Escaping wie im Index: ein `|` im Themennamen würde die
+    Spalten sonst sprengen — genau der Fehler, den diese Kommandos verhindern.
+    """
+    return "| %s | %s | %s | %s |\n" % (
+        cell(topic), cell(source), cell(chunks or NO_CHUNKS),
+        date or datetime.date.today().isoformat())
+
+
+def split_row(line):
+    """Eine Markdown-Tabellenzeile in ihre Zellen — Gegenstück zu `cell()`.
+
+    Split auf unescapte `|`, damit ein escaptes `\\|` in der Zelle bleibt.
+    """
+    body = line.strip()
+    if not (body.startswith("|") and body.endswith("|")):
+        return None
+    cells = [c.strip().replace("\\|", "|")
+             for c in re.split(r"(?<!\\)\|", body[1:-1])]
+    return cells if len(cells) == 4 else None
+
+
+def read_map(state):
+    """→ (lines, rows). Jede Zeile trägt ihren Index, damit remove/replace sie
+    an Ort und Stelle treffen, statt die Datei neu zu schreiben."""
+    path = map_path(state)
+    if not os.path.isfile(path):
+        return [], []
+    with open(path, encoding="utf-8") as fh:
+        lines = fh.readlines()
+    rows = []
+    for i, line in enumerate(lines):
+        cells = split_row(line)
+        if not cells:
+            continue
+        if cells[0] == "Thema" or all(re.match(r"^:?-{2,}:?$", c) for c in cells):
+            continue                      # Kopf- und Trennzeile
+        rows.append({"idx": i, "topic": cells[0], "source": cells[1],
+                     "chunks": cells[2], "date": cells[3], "line": line})
+    return lines, rows
+
+
+def write_map(state, lines):
+    path = map_path(state)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.writelines(lines)
+    return path
+
+
+def engine_topics(state):
+    """Die Themen-Slugs aus der Engine — oder None, wenn sie nicht antwortet.
+
+    `ENGRAM_HOME` wird bewusst auf `<state>/learning` GESETZT statt aus der
+    Umgebung übernommen: MAP.md liegt in genau diesem Repo, und eine Tabelle aus
+    Repo A gegen den Lernstand aus einem fremden Home zu prüfen, meldet lauter
+    Themen als verwaist, die es gibt. Der Rückgabewert None heißt „nicht geprüft"
+    und ist deshalb nicht dasselbe wie die leere Menge.
+    """
+    root = os.environ.get("ENGRAM_ROOT") or os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "..")
+    script = os.path.join(os.path.abspath(root), "scripts", "engram.py")
+    if not os.path.isfile(script):
+        return None
+    env = dict(os.environ)
+    env["ENGRAM_HOME"] = os.path.join(state, "learning")
+    try:
+        out = subprocess.check_output([sys.executable, script, "topics"],
+                                      env=env, stderr=subprocess.DEVNULL)
+        return set(t["topic"] for t in json.loads(out.decode("utf-8")))
+    except Exception:
+        return None
+
+
+def cmd_map_add(args):
+    state = resolve_state(args.state)
+    lines, rows = read_map(state)
+    if not lines:
+        lines = [MAP_INTRO]
+    chunks = norm(args.chunks or NO_CHUNKS)
+    hit = [r for r in rows
+           if r["topic"] == norm(args.topic) and r["source"] == norm(args.source)]
+
+    # Schlüssel ist (Thema, Quelle) — NICHT die ganze Zeile. Ein Vergleich, der das
+    # Datum einschließt, hält dieselbe Zuordnung morgen für eine neue.
+    if any(r["chunks"] == chunks for r in hit):
+        note("steht schon in MAP.md: %s" % hit[0]["line"].strip())
+        return
+    if hit and not args.replace:
+        die("%s ↔ %s steht schon mit anderer Chunk-Angabe in MAP.md:\n  %s\n"
+            "Mit --replace ersetzen oder erst `map-remove` aufrufen."
+            % (args.topic, args.source, hit[0]["line"].strip()))
+
+    row = map_row(args.topic, args.source, args.chunks)
+    if hit:
+        lines[hit[0]["idx"]] = row                    # an Ort und Stelle
+        for r in hit[1:]:
+            lines[r["idx"]] = None                    # Altlasten desselben Paars
+        lines = [l for l in lines if l is not None]
+    else:
+        # Anker ist die letzte TABELLENZEILE, nicht die letzte Datenzeile: sonst
+        # landet der erste Eintrag hinter Prosa, die unter einer leeren Tabelle steht.
+        table = [i for i, l in enumerate(lines) if split_row(l)]
+        at = table[-1] + 1 if table else len(lines)
+        if at == len(lines) and lines and not lines[-1].endswith("\n"):
+            lines[-1] += "\n"
+        lines.insert(at, row)
+    print(write_map(state, lines))
+
+
+def cmd_map_remove(args):
+    """Der fehlende Gegenpart zu `map-add`.
+
+    Engram kennt kein Löschen von Themen, nur `retire` — eine Zeile hier zu
+    entfernen ist also fast immer eine Korrektur, kein Nachvollzug. Ohne Treffer
+    bricht das Kommando ab: eine stille Erfolgsmeldung auf einen Tippfehler wäre
+    schlimmer als die Karteileiche, die sie hinterlässt.
     """
     state = resolve_state(args.state)
+    lines, rows = read_map(state)
+    hit = [r for r in rows if r["topic"] == norm(args.topic)
+           and (args.source is None or r["source"] == norm(args.source))]
+    if not hit:
+        die("keine Zeile für Thema %s%s in MAP.md (`map-check` zeigt den Stand)"
+            % (args.topic, "" if args.source is None else
+               " mit Quelle %s" % args.source))
+    for r in hit:
+        print("entfernt: %s" % r["line"].strip())
+    drop = set(r["idx"] for r in hit)
+    print(write_map(state, [l for i, l in enumerate(lines) if i not in drop]))
+
+
+def cmd_map_check(args):
+    """Gleicht die Tabelle gegen Engine und Quellenverzeichnis ab.
+
+    Ein Thema OHNE Zeile ist ausdrücklich kein Befund: Themen aus Websuche haben
+    legitim keine Quelle. Befunde sind nur Zeilen, die ins Leere zeigen, und
+    doppelte Paare.
+    """
+    state = resolve_state(args.state)
+    lines, rows = read_map(state)
+    if not lines:
+        note("noch keine MAP.md (%s)" % map_path(state))
+        return
+
+    topics = engine_topics(state)
     base = sources_dir(state)
-    os.makedirs(base, exist_ok=True)
-    path = os.path.join(base, "MAP.md")
-    if not os.path.isfile(path):
-        with open(path, "w", encoding="utf-8") as fh:
-            fh.write("# Quellen ↔ Themen\n\n"
-                     "Welches Engram-Thema aus welcher Quelle gebaut wurde. Das "
-                     "Node-Schema hat kein Quellenfeld — diese Tabelle ist der "
-                     "Ersatz.\n\n"
-                     "| Thema | Quelle | Chunks | Datum |\n|---|---|---|---|\n")
-    line = "| %s | %s | %s | %s |\n" % (args.topic, args.source,
-                                        args.chunks or "—",
-                                        datetime.date.today().isoformat())
-    with open(path, encoding="utf-8") as fh:
-        if line in fh.read():
-            note("Zeile steht schon in MAP.md")
-            return
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(line)
-    print(path)
+    slugs = set(s for s in os.listdir(base)
+                if os.path.isfile(os.path.join(base, s, "source.json"))
+                ) if os.path.isdir(base) else set()
+
+    print("MAP.md: %d Zeile(n) · Lernstand: %s"
+          % (len(rows), os.path.join(state, "learning")))
+    if topics is None:
+        note("Engine nicht befragbar (engram.py nicht gefunden oder Fehler) — "
+             "der Themen-Abgleich wurde ÜBERSPRUNGEN, nicht bestanden.")
+
+    findings, seen = [], {}
+    for r in rows:
+        key = (r["topic"], r["source"])
+        if key in seen:
+            findings.append(("doppelt", r, "schon in Zeile %d" % (seen[key] + 1)))
+        else:
+            seen[key] = r["idx"]
+        if topics is not None and r["topic"] not in topics:
+            findings.append(("verwaistes Thema", r, "kein Graph in der Engine"))
+        if r["source"] not in slugs:
+            findings.append(("verwaiste Quelle", r,
+                             "kein sources/%s/source.json" % r["source"]))
+
+    for kind, r, why in findings:
+        print("  %-17s Zeile %d: %s ↔ %s (%s)"
+              % (kind, r["idx"] + 1, r["topic"], r["source"], why))
+
+    mapped_topics = set(r["topic"] for r in rows)
+    if topics:
+        loose = sorted(topics - mapped_topics)
+        if loose:
+            print("  Hinweis: Themen ohne Zeile (ok, wenn ohne Buch gebaut): %s"
+                  % ", ".join(loose))
+    loose_src = sorted(slugs - set(r["source"] for r in rows))
+    if loose_src:
+        print("  Hinweis: Quellen ohne Zeile (noch keinem Thema zugeordnet): %s"
+              % ", ".join(loose_src))
+
+    if findings:
+        print("%d Befund(e) — Zeilen mit `map-remove` oder `map-add --replace` "
+              "richten." % len(findings))
+        sys.exit(1)
+    print("ok — keine verwaisten oder doppelten Zeilen")
 
 
 def cmd_paths(args):
@@ -1118,7 +1316,19 @@ def main():
     p.add_argument("--topic", required=True)
     p.add_argument("--source", required=True)
     p.add_argument("--chunks")
+    p.add_argument("--replace", action="store_true",
+                   help="bestehende Zeile desselben Paars (Thema, Quelle) "
+                        "an ihrer Position ersetzen")
     p.set_defaults(func=cmd_map_add)
+
+    p = sub.add_parser("map-remove", help="Zeile(n) aus sources/MAP.md entfernen")
+    p.add_argument("--topic", required=True)
+    p.add_argument("--source", help="nur die Zeile dieser Quelle")
+    p.set_defaults(func=cmd_map_remove)
+
+    p = sub.add_parser("map-check",
+                       help="MAP.md gegen Engine und sources/ abgleichen")
+    p.set_defaults(func=cmd_map_check)
 
     p = sub.add_parser("paths", help="State-Repo und sources/ auflösen")
     p.set_defaults(func=cmd_paths)
