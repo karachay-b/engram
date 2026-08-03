@@ -103,8 +103,17 @@ Jeder Punkt hier sieht aus wie eine Verbesserungsgelegenheit und ist keine:
   Turn blockieren. Kein „richtiges" Error-Handling nachrüsten.
 - **`digest` ist kein Skript-Unterkommando.** Verdichten ist Modellarbeit; das
   steht so im Source-Skill. Nicht implementieren.
-- **Das Node-Schema hat kein Quellenfeld** und darf keins bekommen — die Engine
-  würde es verwerfen. `sources/MAP.md` ist der Ersatz.
+- **Das Node-Schema hat kein Quellenfeld** und darf keins bekommen. Die
+  Begründung stand hier bis 2026-08 falsch („die Engine würde es verwerfen") —
+  **nachgemessen: sie verwirft es nicht.** `add-topic` nimmt ein `sources`-Feld
+  am Node und ein `provenance`-Objekt top-level klaglos an (0 Warnungen),
+  `doctor` meldet nichts, das Node-Feld überlebt sogar `--extend` (der
+  Deep-Copy trägt es mit); nur Top-Level-Felder gehen dort verloren. Der
+  richtige Grund ist ein anderer: Durchreichen ist keine Zusage, sondern
+  fehlende Validierung. Upstream belegt `source` bereits im Receipt-Schema
+  (`docs/15-target-architecture-2.0.md:154`) und kann den Namen jederzeit auch
+  am Node belegen — dann kollidiert es still, mit Lerndaten daran. `sources/MAP.md`
+  (Buch) bzw. `sources/RESEARCH/<topic>.md` (Websuche) sind der Ersatz.
 
 ## Leitplanken für deine Arbeit
 
