@@ -114,7 +114,14 @@ ohne die Engine anzufassen.
   Kein Embedding-Index; bei ~40 Chunks pro Buch wäre er langsamer, undurchsichtig
   und müsste in jedem Container neu gebaut werden.
 - **Verbindung zum Lernstand:** `sources/MAP.md` (via `engram-source map-add`).
-  Das ist die einzige dauerhafte Zuordnung Thema ↔ Quelle.
+  Das ist die einzige dauerhafte Zuordnung Thema ↔ Quelle — und eine **Chronik der
+  Herkunft, keine Live-Ansicht**: Die Engine kennt die Tabelle nicht und fasst sie
+  nie an. Ein retirtes Thema behält seine Zeile (`retire` ist reversibel und löscht
+  nichts); eine falsch gewordene Zeile wird mit `map-remove` bzw.
+  `map-add --replace` gerichtet, ein zweites Thema aus derselben Quelle ist schlicht
+  eine weitere Zeile. `map-check` gleicht die Tabelle gegen Engine und `sources/` ab
+  und meldet nur Zeilen, die ins Leere zeigen — ein Thema **ohne** Zeile ist kein
+  Befund, denn ohne Buch gebaute Themen haben keine Quelle.
 
 **Die Rolle des Buchs ist Inhalt, nicht Gliederung.** Der Curriculum-Architect nennt
 Kapitel-Kopieren seinen kardinalen Fehler; der Spawn-Baustein im `engram-learn`-Alias

@@ -71,7 +71,9 @@ Was ein Buch besser liefert als eine Websuche: verbindliche **Definitionen**, di
 | `show <slug> --chunks 12-18` | einzelne Chunks ausgeben |
 | `find <slug> <regex> [--limit N]` | Volltextsuche, Treffer mit Chunk-ID und Seitenzahl |
 | `verify <slug> <pfad>` | sha256-Abgleich eines wieder bereitgestellten PDFs |
-| `map-add --topic T --source S [--chunks A-B]` | Zeile in `sources/MAP.md` |
+| `map-add --topic T --source S [--chunks A-B] [--replace]` | Zeile in `sources/MAP.md` |
+| `map-remove --topic T [--source S]` | Zeile(n) aus `sources/MAP.md` entfernen |
+| `map-check` | `MAP.md` gegen Engine und `sources/` abgleichen |
 | `paths` | State-Repo und `sources/` auflösen |
 
 `--pages` ist der wichtigste Schalter: **immer den Scope einschränken**, wenn nur
@@ -101,6 +103,30 @@ Seitenverweise.
    Ist `interests` im learner-model leer, wird zuerst danach gefragt und erst dann
    der Architect gespawnt. Der Ingest oben verbraucht genau das Aufmerksamkeits-
    budget, in dem diese Frage sonst untergeht — deshalb steht sie hier nochmal.
+
+## `MAP.md` pflegen — wenn ein Thema wegfällt oder umzieht
+
+`sources/MAP.md` ist eine Chronik der Herkunft, keine Live-Ansicht des Lernstands.
+Nichts an der Engine berührt sie: Ein Thema kann retired oder gelöscht sein, die
+Zeile bleibt stehen. Das ist Absicht — sie dokumentiert weiterhin korrekt, woher der
+Stoff kam. Drei Fälle, drei Antworten:
+
+- **Thema retired** (`engram.py retire --topic`): Zeile **stehen lassen.** `retire`
+  ist reversibel und löscht nichts; das Thema existiert weiter.
+- **Thema wirklich weg** (Graph von Hand entfernt) oder **Chunk-Angabe falsch**:
+  `map-remove --topic <slug>` bzw. `map-add … --replace`. `--replace` ersetzt die
+  Zeile desselben Paars (Thema, Quelle) **an ihrer Position**, statt eine zweite
+  anzuhängen.
+- **Zweites Thema aus derselben Quelle**: nichts weiter zu tun — schlicht ein
+  weiteres `map-add`. Die Tabelle ist thema-keyed; mehrere Zeilen pro Quelle sind
+  der Normalfall („Ein Buch ≠ ein Topic"). Die Quelle selbst wird nicht angefasst,
+  kein Re-Ingest.
+
+`map-check` ist die Gegenprobe: Es meldet Zeilen, die ins Leere zeigen (Thema ohne
+Graph, Quelle ohne `source.json`) und doppelte Paare, und endet dann mit Exit 1. Ein
+**Thema ohne Zeile ist kein Befund** — aus Websuche gebaute Themen haben legitim
+keine Quelle. Antwortet die Engine nicht, sagt die Ausgabe ausdrücklich, dass der
+Themen-Abgleich übersprungen wurde; „keine Befunde" heißt dann nicht „geprüft".
 
 ## Was in den Chunks steht
 
