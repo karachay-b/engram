@@ -140,6 +140,42 @@ Rollenbeschreibung des Architects grundlegend oder Intake-Schritt 3 / das
 `--add-interest`-Flag, müssen Spawn-Baustein und Gate nachgezogen werden —
 dieselbe Klasse von Duplizierung wie die `description`-Zeilen der Alias-Skills.
 
+### Ohne Buch: der Recherche-Pfad
+
+Der Normalfall ist quellenlos — der Stoff kommt aus dem Modellwissen des Architects.
+Dafür steht im `engram-learn`-Alias ein zweiter Spawn-Baustein
+(`## Recherche — wenn keine Quelle genannt wurde`), der **nicht** das ganze Thema
+recherchiert, sondern drei Node-Klassen belegt: `arbitrary`/`fact` (nicht ableitbar),
+`threshold` (Fehler vergiften alles danach) und den `error_bank`-Katalog. Budget:
+3–6 Abrufe. Ableitbare `concept`-Nodes bleiben unbelegt — die Ableitung ist die Prüfung.
+
+Drei Entscheidungen, die dahinter stehen:
+
+- **Nur abgerufene Belege**, URL plus wörtliches Zitat. Literaturangaben aus dem
+  Gedächtnis sind verboten: die gemessenen Raten erfundener Zitate liegen über
+  ausgelieferte Modelle bei 11–57 %, und ein erfundener Beleg ist schlechter als
+  keiner, weil er Prüfbarkeit vortäuscht.
+- **Nachgelagert, nie davor.** Der Architect läuft gemessen ~7 Minuten still, und das
+  ist laut Upstream-Skill der wahrscheinlichste Abbruchmoment. Ein Budget ohne Deckel
+  würde genau die Stelle verlängern, die am wenigsten trägt.
+- **Ablage neben dem Graphen**, nicht darin: `sources/RESEARCH/<topic>.md`, geschrieben
+  mit dem Write-Tool. Der Architect liefert die Belege unter dem Top-Level-Schlüssel
+  `research`; der wird **vor** `add-topic` aus dem Payload genommen. `list` und
+  `map-check` zählen nur Verzeichnisse mit `source.json` und sehen `RESEARCH/` nicht —
+  insbesondere bleibt „ein Thema ohne `MAP.md`-Zeile ist kein Befund" unverändert wahr.
+
+Einen automatischen Prüflauf gibt es bewusst nicht. Der Beleg leistet Auffindbarkeit:
+Wird ein `claim` strittig, steht die Stelle da. Ein Verifier wäre bei ≤20 Nodes teurer
+als der Schaden — und bei solchen Prüfern entscheidet die Falsch-Alarm-Rate über die
+Brauchbarkeit, nicht die Trefferquote.
+
+**Korrektur einer Begründung, die hier falsch stand:** Das Node-Schema bekommt kein
+Quellenfeld — aber nicht, weil die Engine es verwürfe. Nachgemessen nimmt `add-topic`
+unbekannte Felder klaglos an (`doctor` ok, Node-Felder überleben `--extend`). Der
+tragende Grund ist, dass Durchreichen keine Zusage ist: Upstream belegt `source` schon
+im Receipt-Schema und kann den Namen jederzeit am Node belegen — dann kollidiert es
+still, mit Lerndaten daran.
+
 Der Stop-Hook committet `sources/` zusammen mit `learning/`. Rechtlich gilt: Die
 Derivate eines geschützten Buchs sind ebenso geschützt — sie gehören ins private
 Repo und niemals in diesen öffentlichen Fork.
