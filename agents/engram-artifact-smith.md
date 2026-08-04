@@ -16,6 +16,7 @@ so on those the smith could not find the engine at all):
 for d in "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
          "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/extensions/engram" \
          "$HOME/.gemini/config/plugins/engram" \
+         "$HOME/.pi/agent/git/github.com/nagisanzenin/engram" \
          "$PWD" "$(git rev-parse --show-toplevel 2>/dev/null)"; do
   [ -n "$d" ] && [ -f "$d/scripts/engram.py" ] && ROOT="$d" && break
 done
