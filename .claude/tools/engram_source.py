@@ -210,9 +210,18 @@ def set_heading_style(dotted):
 TOC_LINE = re.compile(r"(\.\s?){4,}\s*\d{1,4}\s*$")
 TOC_LINE_ANY = re.compile(r"(\.\s?){4,}\s*\d{1,4}\b")
 
-# Inhaltsverzeichnis OHNE Punktführung — Titel, Leerraum, Seitenzahl. Wird nur
-# im `--numbered-dot`-Modus geprüft: Ohne ihn scheitert "15. Supervision 31"
-# ohnehin schon an NUMBERED_PLAIN, und die Vorgabe soll unverändert bleiben.
+# Inhaltsverzeichnis OHNE Punktführung — Titel, Leerraum, Seitenzahl, so wie es
+# aus einem Word-Export kommt: "15. Supervision         31". Die drei Leerzeichen
+# im Muster sind die Untergrenze, keine Beschreibung; gemessen am Konzept einer
+# Adaptionseinrichtung stehen dort neun.
+#
+# Nicht auf `\s+` lockern: Dann verwirft die Regel auch "Anlage 7" und jede
+# andere Überschrift, die auf eine Zahl endet. Ein Inhaltsverzeichnis erkennt
+# man am Leerraum, nicht an der Zahl.
+#
+# Wird nur im `--numbered-dot`-Modus und nur auf nummerierten Zeilen geprüft:
+# Ohne ihn scheitert "15. Supervision 31" ohnehin schon an NUMBERED_PLAIN, und
+# die Vorgabe soll unverändert bleiben.
 TOC_SPACED = re.compile(r"\S\s{3,}\d{1,4}\s*$")
 
 
@@ -316,14 +325,20 @@ def is_heading(line):
         return False
     if TOC_LINE.search(s):
         return False
-    if DOTTED_HEADINGS:
+    numbered = NUMBERED.match(s)
+    if DOTTED_HEADINGS and numbered:
         # In diesem Modus ist die Nummer kein Beweis mehr — "13. Waschen und
         # Trocknen sind nur im dafür vorgesehenen Raum erlaubt." trägt dieselbe
         # Nummernform wie ein Kapitel. Der Satzschluss trennt beide: Eine
         # Überschrift endet nicht auf Satzzeichen, ein Listensatz schon.
+        #
+        # Nur für NUMMERIERTE Zeilen — `--numbered-dot` erweitert, was als Nummer
+        # zählt, und darf deshalb auch nur dort strenger sein. Ungeprüft griff
+        # TOC_SPACED sonst auf unnummerierte Versalzeilen über und verwarf
+        # "KAPITEL   2" allein wegen des Modus.
         if TOC_SPACED.search(s) or s.endswith((".", ",", ";", ":", "!", "?")):
             return False
-    if NUMBERED.match(s):
+    if numbered:
         return True
     if s.endswith((".", ",", ";", ":", "!", "?")):
         return False
