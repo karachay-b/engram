@@ -189,11 +189,52 @@ NUMBERED = re.compile(r"^(\d+(?:\.\d+)+)\s+\S|^(\d+)\s+\S")
 # wäre schlimmer als die Überschrift zu verpassen.
 NUMBERED_MULTI = re.compile(r"^\d+(?:\.\d+)+\s+\S")
 
-# Inhaltsverzeichniszeile OHNE Punktführung: Titel, viel Leerraum, Seitenzahl.
-# TOC_LINE verlangt vier Punkte; dieses Buch setzt sein Verzeichnis stellenweise
-# nur mit Ausschluss ("… Mediation und Beratung   22"), und das sieht ohne diese
-# Regel wie eine Überschrift aus, die zufällig auf eine Zahl endet.
-TOC_TAIL = re.compile(r"\s{2,}\d{1,4}\s*$")
+# Inhaltsverzeichnis-Zeile: Punktführung (auch gesperrt gesetzt: ". . . . .")
+# und am Ende die Seitenzahl. Sieht einer nummerierten Überschrift zum
+# Verwechseln ähnlich — und ein Inhaltsverzeichnis als Gliederungsquelle zu
+# nehmen wäre die Kapitelkopie in Reinform, zwanzig Ebenen tief.
+TOC_LINE = re.compile(r"(\.\s?){4,}\s*\d{1,4}\s*$")
+TOC_LINE_ANY = re.compile(r"(\.\s?){4,}\s*\d{1,4}\b")
+
+# Inhaltsverzeichnis OHNE erkennbare Punktführung. Die Punkte überleben die
+# Textextraktion nicht immer — mal bleibt nur Leerraum ("… und Beratung   22"),
+# mal ein Rest ("… zeigen?  ...  426"). Für die Zeile zählt deshalb der andere
+# Marker: Am Ende steht eine Seitenzahl, abgesetzt durch mindestens zwei
+# Leerzeichen. Ein angeklebter Fußnotenzeiger ("… Transaktionsanalyse17") hat
+# diesen Abstand nicht und bleibt eine Überschrift.
+TOC_LINE_SPACED = re.compile(r"\S\s{2,}[.\s]*\d{1,4}\s*$")
+
+
+def is_toc_line(line):
+    """Verzeichniszeile: Titel, dann abgesetzt die Seitenzahl."""
+    s = line.strip()
+    return bool(TOC_LINE.search(s) or TOC_LINE_SPACED.search(s))
+
+
+def numbered_toc_page(lines, minimum=3):
+    """Steht auf dieser Seite ein Verzeichnis, das selbst Gliederungsnummern trägt?
+
+    Der Grund ist eine Lücke, die keine Zeilenregel schließen kann: Ein
+    Verzeichniseintrag, der über zwei Zeilen läuft, trägt seine Seitenzahl auf der
+    ZWEITEN. Die erste sieht dann aus wie eine makellose Überschrift —
+    "5.6 Phase 6: Themen sortieren, Bearbeitungsreihenfolge", und die Zahl steht
+    erst hinter "und Beratungsziele klären ....... 341". Gemessen an Lindemann:
+    13 solcher Geister-Überschriften, alle im Inhaltsverzeichnis, alle mehrstufig
+    nummeriert — und keine einzige davon einer Zeilenheuristik zugänglich.
+
+    Was sie verrät, ist die Nachbarschaft: Wo die Verzeichniszeilen ringsum
+    ihrerseits mit "5.6", "6.4.2" beginnen, ist eine nummerierte Zeile ein
+    Verzeichniseintrag, kein Abschnitt.
+
+    Die Nummer der NACHBARN ist dabei das Entscheidende, nicht die Dichte der
+    Verzeichniszeilen. Ein Register im Nachspann ("Übung 1: … 49",
+    "Mediations-Tipp 3: … 296") besteht zu 90 % aus Verzeichniszeilen, und die
+    echten Überschriften darin — "10.1 Übungen", "10.4 Beratungs-Tipps" — sind
+    die einzigen nummerierten Zeilen weit und breit. Eine reine Dichteregel
+    löschte genau sie.
+    """
+    return sum(1 for l in lines
+               if NUMBERED.match(l.strip()) and is_toc_line(l)) >= minimum
 
 
 def breaks_paragraph(line):
@@ -211,16 +252,9 @@ def breaks_paragraph(line):
         return False
     if s.endswith((".", ",", ";", ":", "!", "?", ")", "»", "«")):
         return False
-    if TOC_TAIL.search(s) or TOC_LINE_ANY.search(s):
+    if is_toc_line(s) or TOC_LINE_ANY.search(s):
         return False
     return True
-
-# Inhaltsverzeichnis-Zeile: Punktführung (auch gesperrt gesetzt: ". . . . .")
-# und am Ende die Seitenzahl. Sieht einer nummerierten Überschrift zum
-# Verwechseln ähnlich — und ein Inhaltsverzeichnis als Gliederungsquelle zu
-# nehmen wäre die Kapitelkopie in Reinform, zwanzig Ebenen tief.
-TOC_LINE = re.compile(r"(\.\s?){4,}\s*\d{1,4}\s*$")
-TOC_LINE_ANY = re.compile(r"(\.\s?){4,}\s*\d{1,4}\b")
 
 
 def normalize_chars(text):
@@ -317,14 +351,17 @@ def heading_number(line):
     return (m.group(1) or m.group(2)) if m else None
 
 
-def is_heading(line):
+def is_heading(line, in_numbered_toc=False):
     s = line.strip()
     if not (2 <= len(s) <= 90):
         return False
     if TOC_LINE.search(s):
         return False
     if NUMBERED.match(s):
-        return True
+        # Auf einer Verzeichnisseite mit nummerierten Einträgen zählt die Nummer
+        # nicht mehr als Beleg — dort ist sie das Merkmal des Eintrags selbst.
+        # Siehe numbered_toc_page().
+        return not in_numbered_toc
     if s.endswith((".", ",", ";", ":", "!", "?")):
         return False
     letters = [c for c in s if c.isalpha()]
@@ -370,6 +407,11 @@ def clean_page(raw, running, label=None):
     """
     text = normalize_chars(raw or "")
     lines = [l.rstrip() for l in text.split("\n")]
+
+    # VOR jeder Bereinigung entscheiden: Der Silbentrennungs-Merge zieht die
+    # Folgezeile mitsamt ihrer Punktführung hoch und verwischt genau das Merkmal,
+    # an dem eine Verzeichniszeile zu erkennen ist.
+    in_toc = numbered_toc_page(lines)
 
     # Kolumnentitel raus, aber nur am Seitenrand: dieselbe Zeichenfolge mitten im
     # Fließtext ist Inhalt, kein Kopfzeilen-Artefakt.
@@ -431,7 +473,7 @@ def clean_page(raw, running, label=None):
         # Satzspiegel-Flush war. Zwei Drittel der Gliederung gingen so verloren,
         # und mit ihnen die Genauigkeit von `(<slug> §<heading>, S. n)`: Der Verweis
         # nannte den zuletzt erkannten Abschnitt, nicht den, in dem der Satz steht.
-        if is_heading(line) and (not buf or breaks_paragraph(line)):
+        if is_heading(line, in_toc) and (not buf or breaks_paragraph(line)):
             flush()
             blocks.append(("heading", line.strip()))
             continue
