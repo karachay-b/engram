@@ -182,6 +182,39 @@ LIGATURES = {"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi",
 # Listenpunkt schreibt sich "3.".
 NUMBERED = re.compile(r"^(\d+(?:\.\d+)+)\s+\S|^(\d+)\s+\S")
 
+# Die MEHRSTUFIGE Form allein ("2.1.1 Titel"). Sie ist die einzige, die stark
+# genug ist, um einen laufenden Absatz zu unterbrechen — siehe clean_page().
+# Die einstufige Form darf das nicht: "1990 war das Jahr, in dem …" beginnt am
+# Zeilenumbruch genauso, und aus einer Jahreszahl eine Kapitelgrenze zu machen
+# wäre schlimmer als die Überschrift zu verpassen.
+NUMBERED_MULTI = re.compile(r"^\d+(?:\.\d+)+\s+\S")
+
+# Inhaltsverzeichniszeile OHNE Punktführung: Titel, viel Leerraum, Seitenzahl.
+# TOC_LINE verlangt vier Punkte; dieses Buch setzt sein Verzeichnis stellenweise
+# nur mit Ausschluss ("… Mediation und Beratung   22"), und das sieht ohne diese
+# Regel wie eine Überschrift aus, die zufällig auf eine Zahl endet.
+TOC_TAIL = re.compile(r"\s{2,}\d{1,4}\s*$")
+
+
+def breaks_paragraph(line):
+    """Darf diese Zeile einen laufenden Absatz aufbrechen?
+
+    Nur die mehrstufige Gliederungsnummer — und auch die nur, wenn nichts an der
+    Zeile nach Fließtext aussieht. `is_heading` prüft die Schlusszeichen erst NACH
+    dem Nummerntreffer, was am Blockanfang harmlos ist: Dort steht ohnehin keine
+    umbrochene Klammer. Mitten im Absatz ist genau das der Normalfall — "(siehe
+    Kapitel 3.3.5 »Utilisation«)." bricht so um, dass die Folgezeile mit der
+    Nummer beginnt. Gemessen: 19 solcher Treffer im Testbuch, alle falsch.
+    """
+    s = line.strip()
+    if not NUMBERED_MULTI.match(s):
+        return False
+    if s.endswith((".", ",", ";", ":", "!", "?", ")", "»", "«")):
+        return False
+    if TOC_TAIL.search(s) or TOC_LINE_ANY.search(s):
+        return False
+    return True
+
 # Inhaltsverzeichnis-Zeile: Punktführung (auch gesperrt gesetzt: ". . . . .")
 # und am Ende die Seitenzahl. Sieht einer nummerierten Überschrift zum
 # Verwechseln ähnlich — und ein Inhaltsverzeichnis als Gliederungsquelle zu
@@ -387,7 +420,18 @@ def clean_page(raw, running, label=None):
         if not line.strip():
             flush()
             continue
-        if is_heading(line) and (not buf or len(buf) == 0):
+        # Überschriften sonst nur am Blockanfang: Eine kurze Versalzeile mitten im
+        # Absatz ist Inhalt, keine Grenze. Eine MEHRSTUFIGE Gliederungsnummer bricht
+        # dagegen auch mitten im Puffer.
+        #
+        # Gemessen an Lindemann, 467 S.: Die alte Bedingung erkannte 50 der 148
+        # numerierten Abschnitte. In einem durchlaufenden Buchsatz folgt die
+        # Überschrift direkt auf die letzte Zeile des vorigen Absatzes — leer war
+        # der Puffer nur dort, wo diese Zeile zufällig kurz genug für den
+        # Satzspiegel-Flush war. Zwei Drittel der Gliederung gingen so verloren,
+        # und mit ihnen die Genauigkeit von `(<slug> §<heading>, S. n)`: Der Verweis
+        # nannte den zuletzt erkannten Abschnitt, nicht den, in dem der Satz steht.
+        if is_heading(line) and (not buf or breaks_paragraph(line)):
             flush()
             blocks.append(("heading", line.strip()))
             continue
