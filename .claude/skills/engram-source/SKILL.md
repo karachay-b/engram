@@ -79,9 +79,16 @@ Was ein Buch besser liefert als eine Websuche: verbindliche **Definitionen**, di
 | `paths` | State-Repo und `sources/` auflösen |
 
 Das globale `--state <pfad>` überschreibt die Suche nach dem State-Repo und gilt
-**absolut**: Trägt der Pfad kein `.git/`, bricht der Aufruf ab, statt auf die
-Suchkette zurückzufallen. Ohne das Flag gilt die Kette aus
-`.claude/hooks/engram-env.sh` unverändert.
+**absolut**: Zeigt der Pfad nicht auf ein Git-Arbeitsverzeichnis, bricht der
+Aufruf ab, statt auf die Suchkette zurückzufallen — ein leer übergebenes
+`--state ""` ebenso, denn das ist ein gesetztes Argument und kein weggelassenes.
+Ein per `git worktree add` angelegtes Checkout zählt mit (dort ist `.git` eine
+Datei). Ohne das Flag gilt die Kette aus `.claude/hooks/engram-env.sh`
+unverändert.
+
+`reclassify` prüft zusätzlich, dass der Slug innerhalb von `sources/` bleibt: Es
+ist das einzige Kommando, das in eine bestehende Quelle **schreibt**, und ein
+vertippter Pfad soll dort abbrechen statt eine fremde Quelle umzuschreiben.
 
 `--pages` ist der wichtigste Schalter: **immer den Scope einschränken**, wenn nur
 Teile des Buchs gebraucht werden. Ein ganzes Lehrbuch zu ingesten, von dem drei

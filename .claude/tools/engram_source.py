@@ -134,11 +134,28 @@ def resolve_state(explicit=None):
     Die Umgebungsvariablen bleiben Teil der Suchkette: Dort ist das
     Durchfallen gewollt und im Hook so dokumentiert ("first hit wins",
     ENGRAM_STATE_REPO als Notausgang für ein Checkout an ungewohnter Stelle).
+
+    Zwei Feinheiten am expliziten Zweig, beide Folge derselben Regel:
+
+    - `--state ""` ist ein GESETZTES Argument, kein weggelassenes. `if explicit`
+      hätte den leeren String wie „nicht angegeben" behandelt und wäre auf die
+      Suchkette zurückgefallen — genau der stille Umweg, den dieser Zweig
+      abstellen soll. Deshalb wird gegen None geprüft, nicht gegen Wahrheit.
+    - `.git` darf hier auch eine DATEI sein. Ein per `git worktree add`
+      angelegtes Checkout trägt statt des Verzeichnisses eine Datei mit dem
+      Verweis auf das echte Git-Verzeichnis. Die Suchkette unten prüft weiter
+      mit `isdir` und bleibt damit zeichengleich zum Hook (`[ -d ]`); nur der
+      explizite Pfad ist großzügiger, und das ist er schon dadurch, dass es
+      ihn im Hook gar nicht gibt.
     """
-    if explicit:
+    if explicit is not None:
+        if not explicit.strip():
+            die("--state ohne Wert. Weglassen heißt „such selbst\", leer "
+                "übergeben heißt nichts — und stillschweigend zu suchen wäre "
+                "genau der Umweg, den das Flag verhindern soll.")
         chosen = os.path.abspath(explicit)
-        if not os.path.isdir(os.path.join(chosen, ".git")):
-            die("--state %s ist kein Git-Checkout (kein .git/ darin). Ohne "
+        if not os.path.exists(os.path.join(chosen, ".git")):
+            die("--state %s ist kein Git-Checkout (kein .git darin). Ohne "
                 "Repo hätten die Quellen keinen Ort, der den Container "
                 "überlebt — und stillschweigend woanders hin zu schreiben "
                 "wäre schlimmer als der Abbruch." % explicit)
@@ -164,6 +181,26 @@ def resolve_state(explicit=None):
 
 def sources_dir(state):
     return os.path.join(state, "sources")
+
+
+def contained_source(state, slug):
+    """`<sources>/<slug>`, nachweislich innerhalb von `sources/`.
+
+    `os.path.join` folgt einem `..` klaglos: `reclassify ../../woanders` träfe
+    ein Verzeichnis außerhalb des gewählten State-Repos, und `reclassify`
+    SCHREIBT dort. Der Slug kommt zwar von der Kommandozeile und nicht aus
+    Buchtext — er ist also kein Einfallstor, sondern ein Tippfehler-Risiko.
+    Für einen Schreibpfad reicht das: Ein vertippter Slug soll abbrechen und
+    nicht eine fremde Quelle umschreiben.
+
+    Bewusst nur hier und nicht in `show`/`find`/`verify`: Die lesen, und für
+    sie wäre es eine Verhaltensänderung an Bestandscode ohne Anlass.
+    """
+    base = os.path.realpath(sources_dir(state))
+    root = os.path.realpath(os.path.join(base, slug))
+    if root == base or os.path.commonpath([base, root]) != base:
+        die("Slug zeigt aus sources/ heraus: %s" % slug)
+    return root
 
 
 def slugify(text, fallback="quelle"):
@@ -1383,7 +1420,7 @@ def cmd_reclassify(args):
     stehen, und damit bleiben auch die Chunk-Bereiche in `MAP.md` gültig.
     """
     state = resolve_state(args.state)
-    root = os.path.join(sources_dir(state), args.slug)
+    root = contained_source(state, args.slug)
     meta_path = os.path.join(root, "source.json")
     if not os.path.isfile(meta_path):
         die("unbekannte Quelle: %s" % args.slug)
@@ -1408,8 +1445,13 @@ def cmd_reclassify(args):
             die("Nachbau des Index weicht vom Bestand ab. Entweder wird das "
                 "Frontmatter nicht verlustfrei zurückgelesen, oder chunks/ und "
                 "index.md sind bereits uneinig — in beiden Fällen würde ein "
-                "Neuschreiben den Unterschied verdecken. Abbruch ohne Änderung; "
-                "zum Eingrenzen `git diff` auf die Quelle.")
+                "Neuschreiben den Unterschied verdecken. Abbruch ohne Änderung.\n"
+                "  eingrenzen:      git diff -- sources/%s\n"
+                "  zurücksetzen:    git checkout -- sources/%s\n"
+                "Das ist auch der Weg zurück, wenn ein Lauf mittendrin "
+                "abgebrochen wurde: Die Quelle liegt in einem Git-Repo, deshalb "
+                "braucht dieses Werkzeug kein eigenes Journal."
+                % (args.slug, args.slug))
 
     changed = []
     for c in chunks:
@@ -1545,43 +1587,74 @@ KIND_FIXTURES = [
 ]
 
 
-def selftest_resolve_state():
-    """`--state` muss absolut gelten — der Rückfall war ein stiller Fehlschlag.
+def selftest_paths():
+    """Pfad-Zusagen: `--state` gilt absolut, ein Slug bleibt in `sources/`.
 
-    Der Fall braucht echte Verzeichnisse, weil genau das Dateisystem-Prädikat
-    geprüft wird (`.git/` vorhanden oder nicht). Ein Mock würde die Zusage
-    nicht belegen.
+    Die Fälle brauchen echte Verzeichnisse, weil genau Dateisystem-Prädikate
+    geprüft werden — ob `.git` da ist, ob es Datei oder Verzeichnis ist, wohin
+    ein `..` im Slug führt. Ein Mock würde keine dieser Zusagen belegen.
+
+    Gibt (Anzahl Prüfungen, Fehlschläge) zurück, damit der Zähler in
+    `cmd_selftest` nicht als Konstante danebenläuft.
     """
     import io
     import tempfile
     bad = []
+
+    def aborts(fn, *a):
+        """Läuft fn(*a) und meldet, ob es mit die() abgebrochen ist."""
+        saved, sys.stderr = sys.stderr, io.StringIO()
+        try:
+            fn(*a)
+            return False
+        except SystemExit:
+            return True
+        finally:
+            sys.stderr = saved
+
     with tempfile.TemporaryDirectory() as tmp:
         ohne = os.path.join(tmp, "kein-checkout")
         os.makedirs(ohne)
-        saved, sys.stderr = sys.stderr, io.StringIO()
-        try:
-            got = resolve_state(ohne)
-            bad.append(("--state ohne .git bricht ab", "Abbruch", got))
-        except SystemExit:
-            pass
-        finally:
-            sys.stderr = saved
+        if not aborts(resolve_state, ohne):
+            bad.append(("--state ohne .git bricht ab", "Abbruch", "Rückgabe"))
+
+        # Ein gesetztes, leeres Argument ist nicht dasselbe wie ein fehlendes.
+        if not aborts(resolve_state, ""):
+            bad.append(("--state '' bricht ab", "Abbruch", "Rückgabe"))
 
         mit = os.path.join(tmp, "checkout")
         os.makedirs(os.path.join(mit, ".git"))
         got = resolve_state(mit)
         if got != os.path.abspath(mit):
-            bad.append(("--state mit .git wird übernommen",
-                        os.path.abspath(mit), got))
-    return bad
+            bad.append(("--state mit .git-Verzeichnis", os.path.abspath(mit), got))
+
+        # `git worktree add` legt .git als DATEI an, nicht als Verzeichnis.
+        wt = os.path.join(tmp, "linked-worktree")
+        os.makedirs(wt)
+        with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+            fh.write("gitdir: %s/.git/worktrees/lw\n" % mit)
+        got = resolve_state(wt)
+        if got != os.path.abspath(wt):
+            bad.append(("--state auf linked worktree", os.path.abspath(wt), got))
+
+        os.makedirs(os.path.join(mit, "sources", "echte-quelle"))
+        got = contained_source(mit, "echte-quelle")
+        want = os.path.realpath(os.path.join(mit, "sources", "echte-quelle"))
+        if got != want:
+            bad.append(("Slug innerhalb sources/", want, got))
+        if not aborts(contained_source, mit, "../../anderswo"):
+            bad.append(("Slug mit .. bricht ab", "Abbruch", "Rückgabe"))
+
+    return 6, bad
 
 
 def cmd_selftest(args):
     failures = [(name, expected, classify(text, path))
                 for name, text, path, expected in KIND_FIXTURES
                 if classify(text, path) != expected]
-    failures += selftest_resolve_state()
-    total = len(KIND_FIXTURES) + 2
+    path_total, path_bad = selftest_paths()
+    failures += path_bad
+    total = len(KIND_FIXTURES) + path_total
     for name, expected, got in failures:
         sys.stderr.write("FAIL  %s: erwartet %s, bekommen %s\n"
                          % (name, expected, got))
