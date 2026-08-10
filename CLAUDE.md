@@ -122,6 +122,16 @@ ohne die Engine anzufassen.
 - **Nachschlagen statt laden:** Index lesen → `find` → 3–10 Chunks gezielt lesen.
   Kein Embedding-Index; bei ~40 Chunks pro Buch wäre er langsamer, undurchsichtig
   und müsste in jedem Container neu gebaut werden.
+- **`kind` ist eine Leseempfehlung, kein Datum.** Das Etikett je Chunk steuert, was
+  der Architect überspringt (`exercise`, `toc-like`) und was er zuerst liest
+  (`definition`, `example`) — die erste Klasse löscht bei einem Fehltreffer Inhalt,
+  die zweite kostet nur einen Platz im 10er-Budget. Deshalb ist sie schärfer
+  eingestellt. Die Marker sind an deutscher Fachprosa gemessen; ein Text ohne
+  ausgezeichnete Definitionen läuft auf `prose`, und `add`/`reclassify` sagen das
+  in echter Werkzeugausgabe, statt es stillschweigend hinzunehmen.
+  `reclassify <slug>` zieht eine schon ingestete Quelle nach, wenn die Heuristik
+  sich geändert hat — **ohne das PDF**, das hier ohnehin meist fehlt, und ohne
+  Chunk-IDs, Bodies oder Seitenmarker anzufassen; `MAP.md` bleibt gültig.
 - **Verbindung zum Lernstand:** `sources/MAP.md` (via `engram-source map-add`).
   Das ist die einzige dauerhafte Zuordnung Thema ↔ Quelle — und eine **Chronik der
   Herkunft, keine Live-Ansicht**: Die Engine kennt die Tabelle nicht und fasst sie
@@ -237,3 +247,15 @@ Wie CI (`.github/workflows/test.yml`):
 bun install && bun run test && npx tsc --noEmit
 python3 scripts/engram.py selftest
 ```
+
+Dazu der Selftest des Quellen-Werkzeugs — er prüft die `kind`-Heuristik gegen
+Fixtures, die aus echtem Material gezogen sind:
+
+```bash
+python3 .claude/tools/engram_source.py selftest
+```
+
+Er hängt **nicht** in `.github/workflows/test.yml`, und das ist Absicht: Die
+Workflow-Datei ist Upstream-Code, ein Schritt darin wäre der erste Konflikt beim
+nächsten `git merge upstream/main`. Wer die Marker in `engram_source.py` anfasst,
+ruft ihn von Hand auf.

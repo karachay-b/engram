@@ -71,6 +71,8 @@ Was ein Buch besser liefert als eine Websuche: verbindliche **Definitionen**, di
 | `show <slug> --chunks 12-18` | einzelne Chunks ausgeben |
 | `find <slug> <regex> [--limit N]` | Volltextsuche, Treffer mit Chunk-ID und Seitenzahl |
 | `verify <slug> <pfad>` | sha256-Abgleich eines wieder bereitgestellten PDFs |
+| `reclassify <slug> [--dry-run]` | `kind` neu vergeben, **ohne** das PDF |
+| `selftest` | Fixtures der `kind`-Heuristik prüfen |
 | `map-add --topic T --source S [--chunks A-B] [--replace]` | Zeile in `sources/MAP.md` |
 | `map-remove --topic T [--source S]` | Zeile(n) aus `sources/MAP.md` entfernen |
 | `map-check` | `MAP.md` gegen Engine und `sources/` abgleichen |
@@ -150,6 +152,32 @@ Quellenfeld, und es darf auch keins bekommen.
 
 `kind: exercise` und `kind: toc-like` beim Kurrikulumbau überspringen.
 `kind: definition` zuerst lesen.
+
+### `kind` ist genre-abhängig — und sagt es selbst
+
+Die Marker sind an deutscher Fachprosa gemessen (Definitionsrahmen wie „Unter X
+versteht man", „Der Begriff X stammt von…") und an den festen Abschnittsnamen von
+Lehrbüchern (`Definition`, `Klassifikation`, `Kasuistik`, `Terminologie`). Ein Text,
+der seine Definitionen nicht auszeichnet, bekommt sie nicht — ein Konzeptpapier
+etwa läuft vollständig auf `prose`, und das ist keine Fehlfunktion.
+
+`add` und `reclassify` geben deshalb die Verteilung aus und **warnen**, wenn eine
+Quelle ab 20 Chunks keinen einzigen `definition`- oder `example`-Chunk trägt. Steht
+diese Warnung da, ist `kind` für dieses Buch kein Filter: Dann über `find`
+einsteigen, statt nach `kind: definition` zu greifen.
+
+Die beiden Klassen sind unterschiedlich teuer, und das erklärt, warum sie
+unterschiedlich scharf eingestellt sind: `exercise` und `toc-like` lassen den
+Architect **überspringen** — ein Fehltreffer löscht Inhalt. `definition` und
+`example` steuern nur die Reihenfolge. Wer die Heuristik ändert, darf die
+Skip-Klassen deshalb nicht mit derselben Großzügigkeit behandeln wie die anderen
+beiden. `selftest` hält beide Richtungen fest.
+
+`reclassify` ist der Weg, eine bereits ingestete Quelle nachzuziehen, wenn die
+Heuristik sich geändert hat — es braucht das PDF nicht, fasst Chunk-IDs, Bodies
+und Seitenmarker nicht an und lässt `MAP.md` damit gültig. Vor jeder Änderung baut
+es den Index aus dem zurückgelesenen Stand nach und bricht ab, wenn der Nachbau
+vom Bestand abweicht. Immer erst mit `--dry-run`.
 
 ## Nachschlagen statt alles laden
 
