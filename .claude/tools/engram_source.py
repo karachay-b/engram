@@ -23,6 +23,7 @@ Der Inhalt landet im PRIVATEN Repo (engram-learning), niemals in diesem Fork.
 """
 
 import argparse
+import collections
 import datetime
 import hashlib
 import json
@@ -33,7 +34,7 @@ import subprocess
 import sys
 import unicodedata
 
-TOOL_VERSION = "engram-source 1.0"
+TOOL_VERSION = "engram-source 1.1"
 
 # Zielband für Chunks. Untergrenze, weil ein 80-Wort-Schnipsel dem Architect
 # nichts sagt; Obergrenze, weil sein Kontext das Nadelöhr des ganzen Ablaufs ist.
@@ -122,9 +123,45 @@ def resolve_state(explicit=None):
 
     Der Hook ist die Referenz; wer hier eine eigene Suche erfindet, baut den
     zweiten Pfad, der bei der nächsten Umgebungsänderung auseinanderläuft.
+
+    `--state` ist davon ausgenommen und gilt absolut: Trägt der Pfad kein
+    Checkout, bricht der Aufruf ab, statt auf die Suchkette zurückzufallen. Der
+    Unterschied ist kein Feinschliff — beim Testen von `reclassify` lief genau
+    dieser Rückfall auf das ECHTE Repo, während die Ausgabe wie ein bestandener
+    Isolationstest aussah. Ein Argument, das der Aufrufer ausdrücklich setzt,
+    darf nicht stillschweigend umgeleitet werden.
+
+    Die Umgebungsvariablen bleiben Teil der Suchkette: Dort ist das
+    Durchfallen gewollt und im Hook so dokumentiert ("first hit wins",
+    ENGRAM_STATE_REPO als Notausgang für ein Checkout an ungewohnter Stelle).
+
+    Zwei Feinheiten am expliziten Zweig, beide Folge derselben Regel:
+
+    - `--state ""` ist ein GESETZTES Argument, kein weggelassenes. `if explicit`
+      hätte den leeren String wie „nicht angegeben" behandelt und wäre auf die
+      Suchkette zurückgefallen — genau der stille Umweg, den dieser Zweig
+      abstellen soll. Deshalb wird gegen None geprüft, nicht gegen Wahrheit.
+    - `.git` darf hier auch eine DATEI sein. Ein per `git worktree add`
+      angelegtes Checkout trägt statt des Verzeichnisses eine Datei mit dem
+      Verweis auf das echte Git-Verzeichnis. Die Suchkette unten prüft weiter
+      mit `isdir` und bleibt damit zeichengleich zum Hook (`[ -d ]`); nur der
+      explizite Pfad ist großzügiger, und das ist er schon dadurch, dass es
+      ihn im Hook gar nicht gibt.
     """
+    if explicit is not None:
+        if not explicit.strip():
+            die("--state ohne Wert. Weglassen heißt „such selbst\", leer "
+                "übergeben heißt nichts — und stillschweigend zu suchen wäre "
+                "genau der Umweg, den das Flag verhindern soll.")
+        chosen = os.path.abspath(explicit)
+        if not os.path.exists(os.path.join(chosen, ".git")):
+            die("--state %s ist kein Git-Checkout (kein .git darin). Ohne "
+                "Repo hätten die Quellen keinen Ort, der den Container "
+                "überlebt — und stillschweigend woanders hin zu schreiben "
+                "wäre schlimmer als der Abbruch." % explicit)
+        return chosen
+
     candidates = [
-        explicit,
         os.environ.get("ENGRAM_STATE"),
         os.environ.get("ENGRAM_STATE_REPO"),
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..",
@@ -144,6 +181,26 @@ def resolve_state(explicit=None):
 
 def sources_dir(state):
     return os.path.join(state, "sources")
+
+
+def contained_source(state, slug):
+    """`<sources>/<slug>`, nachweislich innerhalb von `sources/`.
+
+    `os.path.join` folgt einem `..` klaglos: `reclassify ../../woanders` träfe
+    ein Verzeichnis außerhalb des gewählten State-Repos, und `reclassify`
+    SCHREIBT dort. Der Slug kommt zwar von der Kommandozeile und nicht aus
+    Buchtext — er ist also kein Einfallstor, sondern ein Tippfehler-Risiko.
+    Für einen Schreibpfad reicht das: Ein vertippter Slug soll abbrechen und
+    nicht eine fremde Quelle umschreiben.
+
+    Bewusst nur hier und nicht in `show`/`find`/`verify`: Die lesen, und für
+    sie wäre es eine Verhaltensänderung an Bestandscode ohne Anlass.
+    """
+    base = os.path.realpath(sources_dir(state))
+    root = os.path.realpath(os.path.join(base, slug))
+    if root == base or os.path.commonpath([base, root]) != base:
+        die("Slug zeigt aus sources/ heraus: %s" % slug)
+    return root
 
 
 def slugify(text, fallback="quelle"):
@@ -781,8 +838,65 @@ def normalize_sizes(sections, doc):
 # Chunk-Art
 # --------------------------------------------------------------------------- #
 
-DEF_RE = re.compile(r"\b(Definition|Satz|Theorem|Lemma|Korollar|Axiom)\b", re.I)
-EX_RE = re.compile(r"\b(Beispiel|Example)\b", re.I)
+# `Satz` ohne Nummer ist im Deutschen ein Allerweltswort — "ein Satz", "der Satz
+# fiel spät", "Glaubenssätze". Gemessen an Lindemann: 7 Treffer, kein einziger ein
+# Lehrsatz, und Chunk 0090 ("4.3.4 Überzeugungen, Leit- und Glaubenssätze") trug
+# sein `definition` allein daraus. Was "Satz 3.1" zum Lehrsatz macht, ist die
+# Nummer — dasselbe Idiom, mit dem TASK_RE unten "Übung 4" von "Übung" trennt.
+DEF_RE = re.compile(r"\b(?:Definition|Theorem|Lemma|Korollar|Axiom)\b|\bSatz\s*\d", re.I)
+
+# Definitorische SATZRAHMEN statt Stichwörter — der Zugang zu Fachprosa, die ihre
+# Definitionen nicht auszeichnet. Der Unterschied ist gemessen, nicht vermutet:
+# `bezeichnet` und `Der Begriff` als blanke Stichwörter hätten 11 Chunks neu
+# etikettiert, und die Stichprobe zeigte sie überwiegend als Fehltreffer — "Der
+# Begriff der Attraktivität bringt einen weiteren Aspekt ein" ist keine
+# Definition. Erst Begriff PLUS definierendes Verb trägt: dann bleiben zwei
+# Chunks, beide Herkunftsdefinitionen (Coaching, Supervision, Mediation).
+#
+# Die Zeichenklasse [^.] hält jeden Rahmen im Satz. Über einen Punkt hinweg
+# würde "Der Begriff X. Später bezeichnet man …" zusammenlaufen, und der Rahmen
+# wäre keiner mehr.
+DEF_FRAME = re.compile(
+    r"Der Begriff\s+[^.]{0,60}?"
+    r"(?:stammt|bezeichnet|meint|geht zurück|leitet sich|wird verwendet)"
+    r"|Unter\s+[^.]{2,60}?\s+versteht man"
+    r"|wird\s+(?:als|auch)\s+[^.]{2,60}?\s+bezeichnet"
+    r"|bezeichnet man als"
+    r"|\bBegriffsbestimmung\b"
+    r"|\bdefiniert\s+(?:als|man)\b"
+    r"|\bper definitionem\b",
+    re.I)
+
+# Fallvokabular. In Medizin und Psychologie ist die Kasuistik die tragende
+# Textsorte; `Beispiel` allein greift dort nicht, und `\bBeispiel\b` trifft
+# "Fallbeispiel" wegen der Wortgrenze ohnehin nicht. In beiden vorhandenen
+# Korpora: null Treffer — die Erweiterung ist für den Bestand nachweislich
+# folgenlos und zielt allein auf Genres, für die hier kein Korpus liegt.
+EX_RE = re.compile(
+    r"\b(?:Beispiel|Example|Fallbeispiel|Fallvignette|Kasuistik|Praxisbeispiel)\b",
+    re.I)
+
+# Überschriften wiegen schwerer als Fließtext: Ein Abschnitt, der "Definition"
+# oder "Klassifikation" HEISST, ist einer — ein Fließtextwort ist nur ein Indiz.
+# Genau hier liegt die Brücke zu den ungetesteten Genres: Lehrbücher der Medizin
+# und der Wissenschaftstheorie führen feste Abschnittsnamen, wo Fachprosa gar
+# keine Marker setzt.
+#
+# Für den vorhandenen Bestand ist das folgenlos, und das ist die ehrliche Zahl:
+# EIN Treffer auf 183 Überschriften ("2.2.1 Was ist ein »System«?"), und der
+# Chunk trug `definition` schon über die Fließtext-Marker. Diese Muster sind
+# also ein begründeter Vorschuss auf Genres, für die hier kein Korpus liegt —
+# belegt sind sie erst, wenn ein solches Buch ingestet wird. Bis dahin ist
+# `kind_report` die Absicherung, nicht diese Regex.
+#
+# Kein abschließendes \b: deutsche Überschriften komponieren
+# ("Klassifikationssysteme", "Grundbegriffe der Testtheorie").
+HEAD_DEF = re.compile(
+    r"\b(?:definition|begriffsbestimmung|grundbegriffe|terminologie|nomenklatur"
+    r"|klassifikation|was ist|was sind)", re.I)
+HEAD_EX = re.compile(
+    r"\b(?:fallbeispiel|fallvignette|kasuistik|praxisbeispiel)", re.I)
+
 TASK_RE = re.compile(r"\b(Aufgabe|Übung|Exercise|Problem)\s*\d", re.I)
 MATH_RE = re.compile(r"[=+×÷∑∫≤≥≠√±∞∂αβγδθλμσπΣΩ]")
 
@@ -810,9 +924,16 @@ def classify(text, path):
     dense = tasks >= 2 and tasks >= max(len(text.split()), 1) / 150.0
     if dense or re.search(r"\b(aufgaben|übungen|exercises|problems)\b", head):
         return "exercise"
-    if len(DEF_RE.findall(text)) >= 2 or DEF_RE.search(head):
+    # Ab hier sind die Etiketten billig: `definition` und `example` steuern nur die
+    # LESEREIHENFOLGE des Architects, `exercise` und `toc-like` oben lassen ihn
+    # überspringen. Deshalb darf hier breiter gegriffen werden als dort — ein
+    # Fehltreffer verdrängt einen besseren Chunk aus dem 10er-Budget, er löscht
+    # keinen. Die Schwelle von zwei Treffern bleibt trotzdem: Ein einzelner Rahmen
+    # steht in fast jedem Fachtext.
+    if len(DEF_RE.findall(text)) + len(DEF_FRAME.findall(text)) >= 2 \
+            or DEF_RE.search(head) or HEAD_DEF.search(head):
         return "definition"
-    if len(EX_RE.findall(text)) >= 2:
+    if len(EX_RE.findall(text)) >= 2 or HEAD_EX.search(head):
         return "example"
     if text and len(MATH_RE.findall(text)) / max(len(text), 1) > 0.012:
         return "formula-dense"
@@ -901,8 +1022,14 @@ def write_source(state, slug, meta, doc, spans, sections, pdf_path, keep_pdf):
     return root, rows
 
 
-def write_index(root, slug, meta, rows):
-    """Das Kartenblatt. Klein halten — es wird IMMER gelesen, die Chunks nicht."""
+def render_index(slug, meta, rows):
+    """Das Kartenblatt. Klein halten — es wird IMMER gelesen, die Chunks nicht.
+
+    Getrennt vom Schreiben, weil `reclassify` den Index aus den vorhandenen
+    Chunks NACHBAUEN können muss, ohne ihn anzufassen: Nur wenn der Nachbau des
+    unveränderten Standes zeichengleich herauskommt, ist bewiesen, dass das
+    Zurücklesen des Frontmatters verlustfrei war.
+    """
     out = ["# %s" % (meta.get("title") or slug), ""]
     if meta.get("author"):
         out.append("**Autor:** %s  " % meta["author"])
@@ -964,9 +1091,13 @@ def write_index(root, slug, meta, rows):
                    % (r["id"], pages, cell(heading), r["kind"],
                       r["words"], cell(r["preview"])))
     out.append("")
+    return "\n".join(out)
+
+
+def write_index(root, slug, meta, rows):
     path = os.path.join(root, "index.md")
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(out))
+        fh.write(render_index(slug, meta, rows))
     return path
 
 
@@ -1107,6 +1238,7 @@ def cmd_add(args):
     big = sum(1 for r in rows if r["words"] > MAX_WORDS)
     if small or big:
         note("außerhalb des Zielbands: %d zu klein, %d zu groß" % (small, big))
+    kind_report(rows)
     warn_if_interests_empty(state)
     print(idx)   # bleibt die letzte Zeile: der maschinenlesbare Rückgabewert
 
@@ -1203,6 +1335,332 @@ def cmd_verify(args):
     print("  erwartet: %s" % meta.get("sha256"))
     print("  bekommen: %s" % actual)
     sys.exit(1)
+
+
+# --------------------------------------------------------------------------- #
+# Nachträgliches Etikettieren
+# --------------------------------------------------------------------------- #
+
+def kind_report(rows):
+    """Die `kind`-Verteilung sichtbar machen — und melden, wenn sie nichts taugt.
+
+    Für Genres, an denen die Heuristik nie gemessen wurde, kann sie nicht
+    zusagen, dass sie greift. Sie kann aber sagen, dass sie es nicht tat: Eine
+    Quelle ohne einen einzigen `definition`- oder `example`-Chunk hat entweder
+    wirklich keine Definitionen — oder ein Satzbild, das die Marker nicht setzen.
+    Beides führt zur selben Handlung, und die soll dastehen, statt durch
+    Nachzählen von Hand herauszukommen.
+    """
+    dist = collections.Counter(r["kind"] for r in rows)
+    note("kind: %s" % ", ".join("%s %d" % (k, dist[k]) for k in sorted(dist)))
+    if len(rows) >= 20 and not dist["definition"] and not dist["example"]:
+        note("WARNUNG — %d Chunks, davon kein einziger `definition` oder "
+             "`example`. Für dieses Buch taugt `kind` nicht als Filter; beim "
+             "Kurrikulumbau gezielt über `find` einsteigen, statt nach "
+             "`kind: definition` zu greifen." % len(rows))
+
+
+def parse_chunk(path):
+    """Eine Chunk-Datei in genau die Felder zurücklesen, die `write_index` braucht.
+
+    Der Umkehrschluss zu `yaml_list`: Listen sind dort mit `", "` verbunden und
+    tragen kein einziges echtes Anführungszeichen mehr im Inneren — `yaml_list`
+    ersetzt es beim Schreiben durch ein einfaches. Deshalb ist das Trennen an
+    dieser Zeichenfolge hier verlustfrei und nicht bloß meistens richtig.
+
+    Ob es das wirklich war, entscheidet trotzdem nicht dieses Argument, sondern
+    der Nachbau-Vergleich in `cmd_reclassify`.
+    """
+    with open(path, encoding="utf-8") as fh:
+        raw = fh.read()
+    m = re.match(r"^---\n(.*?)\n---\n(.*)$", raw, re.S)
+    if not m:
+        die("Chunk ohne Frontmatter: %s" % path)
+    front, body = m.group(1), m.group(2)
+
+    def scalar(key):
+        hit = re.search(r"^%s:[ ]?(.*)$" % key, front, re.M)
+        return hit.group(1).strip() if hit else None
+
+    def listval(key):
+        val = scalar(key)
+        if not val or not (val.startswith("[") and val.endswith("]")):
+            return []
+        inner = val[1:-1].strip()
+        return [p.strip().strip('"') for p in inner.split('", "')] if inner else []
+
+    cid, kind, words = scalar("id"), scalar("kind"), scalar("words")
+    if not cid or not kind or words is None:
+        die("Chunk mit unvollständigem Frontmatter: %s" % path)
+    return {
+        "id": cid,
+        "file": os.path.basename(path),
+        "pages": listval("pages"),
+        "path": listval("heading"),
+        "also": listval("also"),
+        "kind": kind,
+        "words": int(words),
+        "preview": re.sub(r"^\[S\. [^\]]+\]\s*", "", body).strip()[:90],
+        "front": front,
+        "body": body,
+        "raw": raw,
+    }
+
+
+def cmd_reclassify(args):
+    """`classify` erneut auf vorhandene Chunks anwenden — ohne das PDF.
+
+    Warum überhaupt: Die Marker-Heuristik wird weiterentwickelt, das Original
+    aber ist gitignored und überlebt den Container nicht. Ein erneuter Ingest
+    wäre der einzige andere Weg und scheitert genau dann, wenn er gebraucht wird.
+
+    Was hier NICHT passiert: Die Segmentierung wird nicht angefasst. `classify`
+    läuft in `write_source` nachgelagert und speist die Abschnittsgrenzen nicht —
+    Chunk-IDs, Seitenmarker und Bodies bleiben deshalb Zeichen für Zeichen
+    stehen, und damit bleiben auch die Chunk-Bereiche in `MAP.md` gültig.
+    """
+    state = resolve_state(args.state)
+    root = contained_source(state, args.slug)
+    meta_path = os.path.join(root, "source.json")
+    if not os.path.isfile(meta_path):
+        die("unbekannte Quelle: %s" % args.slug)
+    with open(meta_path, encoding="utf-8") as fh:
+        meta = json.load(fh)
+
+    chunk_dir = os.path.join(root, "chunks")
+    files = sorted(f for f in os.listdir(chunk_dir) if f.endswith(".md"))
+    if not files:
+        die("keine Chunks in %s" % chunk_dir)
+    chunks = [parse_chunk(os.path.join(chunk_dir, f)) for f in files]
+
+    # Der Nachbau-Beweis, vor jeder Änderung: Wenn der Index aus dem ZURÜCK-
+    # GELESENEN Stand nicht zeichengleich herauskommt, hat das Parsen etwas
+    # verloren — und dann darf hier nichts geschrieben werden, sonst wäre der
+    # Verlust nach dem Neuschreiben nicht mehr sichtbar.
+    idx_path = os.path.join(root, "index.md")
+    if os.path.isfile(idx_path):
+        with open(idx_path, encoding="utf-8") as fh:
+            current = fh.read()
+        if render_index(args.slug, meta, chunks) != current:
+            die("Nachbau des Index weicht vom Bestand ab. Entweder wird das "
+                "Frontmatter nicht verlustfrei zurückgelesen, oder chunks/ und "
+                "index.md sind bereits uneinig — in beiden Fällen würde ein "
+                "Neuschreiben den Unterschied verdecken. Abbruch ohne Änderung.\n"
+                "  eingrenzen:      git diff -- sources/%s\n"
+                "  zurücksetzen:    git checkout -- sources/%s\n"
+                "Das ist auch der Weg zurück, wenn ein Lauf mittendrin "
+                "abgebrochen wurde: Die Quelle liegt in einem Git-Repo, deshalb "
+                "braucht dieses Werkzeug kein eigenes Journal."
+                % (args.slug, args.slug))
+
+    changed = []
+    for c in chunks:
+        new_kind = classify(c["body"], c["path"])
+        if new_kind != c["kind"]:
+            changed.append((c, c["kind"], new_kind))
+        c["kind"] = new_kind
+
+    for c, old, new in changed:
+        note("  %s  %s → %s   %s"
+             % (c["id"], old, new, (c["path"] or [""])[-1][:56]))
+    if changed:
+        before = collections.Counter(old for _, old, _ in changed)
+        after = collections.Counter(new for _, _, new in changed)
+        note("%s: %d von %d Chunks neu etikettiert (%s)"
+             % (args.slug, len(changed), len(chunks),
+                ", ".join("%s %+d" % (k, after[k] - before[k])
+                          for k in sorted(set(before) | set(after)))))
+    else:
+        note("%s: keine Änderung (%d Chunks geprüft)" % (args.slug, len(chunks)))
+
+    # Nach der Änderungsliste, nicht davor: So liest sich die Verteilung als
+    # Ergebnis. Im Dry-Run ist sie der Stand, der herauskäme.
+    kind_report(chunks)
+    if not changed:
+        return
+    if args.dry_run:
+        note("--dry-run: nichts geschrieben")
+        return
+
+    for c, _, _ in changed:
+        front = re.sub(r"^kind: .*$", "kind: %s" % c["kind"], c["front"],
+                       count=1, flags=re.M)
+        with open(os.path.join(chunk_dir, c["file"]), "w",
+                  encoding="utf-8") as fh:
+            fh.write("---\n" + front + "\n---\n" + c["body"])
+    write_index(root, args.slug, meta, chunks)
+    # Provenienz getrennt halten: `tool` sagt, womit ingestet wurde, und das
+    # bleibt wahr. Womit zuletzt etikettiert wurde, ist eine andere Aussage.
+    meta["reclassified"] = {"date": datetime.date.today().isoformat(),
+                            "tool": TOOL_VERSION}
+    with open(meta_path, "w", encoding="utf-8") as fh:
+        json.dump(meta, fh, ensure_ascii=False, indent=2, sort_keys=True)
+        fh.write("\n")
+    print(idx_path)
+
+
+# --------------------------------------------------------------------------- #
+# Selftest der kind-Heuristik
+# --------------------------------------------------------------------------- #
+#
+# Warum inline und nicht in der CI: `.github/workflows/test.yml` ist Upstream-
+# Datei. Alles außerhalb von `.claude/` und `CLAUDE.md` soll bei
+# `git merge upstream/main` konfliktfrei bleiben — ein Schritt dort wäre der
+# erste Konflikt, den ein Update auslöst. Der Aufruf steht stattdessen in
+# CLAUDE.md unter „Tests".
+#
+# Die Fälle sind keine erfundenen Beispiele: 2, 3 und 5 sind die Fehltreffer und
+# Beinahe-Fehltreffer, die an Lindemann tatsächlich gemessen wurden.
+
+PADDING = " ".join(["Fließtext"] * 320)
+
+KIND_FIXTURES = [
+    ("Rahmen ×2 → definition",
+     "Der Begriff »Coach« stammt von dem englischen Wort für Kutsche. "
+     "Unter Supervision versteht man die Reflexion beruflichen Handelns.",
+     ["3 Beratungsformen"], "definition"),
+
+    ("ein Rahmen allein reicht nicht",
+     "Der Begriff »Coach« stammt von dem englischen Wort für Kutsche. "
+     + PADDING,
+     ["3 Beratungsformen"], "prose"),
+
+    # Gemessen an Lindemann 0069: `Der Begriff` als blankes Stichwort hätte hier
+    # zugeschlagen. Ohne definierendes Verb ist es keine Definition.
+    ("»Der Begriff X bringt …« ist keine Definition",
+     "Der Begriff der Attraktivität bringt einen weiteren Aspekt in die "
+     "Zielerreichung ein. Der Begriff der Machbarkeit meldet sich dort "
+     "ebenfalls zu Wort. " + PADDING,
+     ["3.7.5 Weitere Kriterien"], "prose"),
+
+    # Gemessen an Lindemann 0090: trug `definition` allein aus zwei »Satz«.
+    ("»Satz« als Fließtextwort → prose",
+     "Dieser Satz fiel spät im Gespräch. Ein Satz allein trägt noch nichts. "
+     + PADDING,
+     ["4.3.4 Überzeugungen und Glaubenssätze"], "prose"),
+
+    ("»Satz 3.1« ist ein Lehrsatz → definition",
+     "Satz 3.1 besagt, dass die Folge konvergiert. Satz 3.2 folgt daraus. "
+     + PADDING,
+     ["3 Konvergenz"], "definition"),
+
+    # Der Kapitel-10-Fall: ein Übungsregister ist ein Verzeichnis, kein
+    # Übungsteil. `toc-like` muss vor `exercise` greifen.
+    ("Übungsregister mit Punktführung → toc-like",
+     "\n".join("Übung %d: Spiegeln ............................ %d"
+               % (i, 40 + i) for i in range(1, 8)),
+     ["10.1 Übungen"], "toc-like"),
+
+    # Der Querverweis-Fall: 15 Chunks bei Lindemann sahen so aus. Zwei Nennungen
+    # in einem langen Fachabschnitt sind Verweise, kein Übungsteil — würde
+    # `exercise` hier greifen, verlöre der Architect den Abschnitt.
+    ("zwei Übungsverweise im Fachtext → prose",
+     "Vergleiche dazu Übung 4 weiter unten. Siehe auch Übung 7. " + PADDING,
+     ["3.5.6 Zirkuläre Fragen"], "prose"),
+
+    ("dichter Aufgabenblock → exercise",
+     "Aufgabe 1: Rollen benennen. Aufgabe 2: Perspektive wechseln. "
+     "Aufgabe 3: Hypothese bilden. Aufgabe 4: Auftrag klären.",
+     ["7 Übungsteil"], "exercise"),
+
+    ("Überschrift Kasuistik → example",
+     "Eine 43-jährige Patientin stellt sich mit anhaltender Erschöpfung vor. "
+     + PADDING,
+     ["5 Kasuistik"], "example"),
+
+    ("Überschrift Klassifikation → definition",
+     "Die Einteilung folgt den gebräuchlichen Kategorien. " + PADDING,
+     ["2 Klassifikation der Störungen"], "definition"),
+
+    ("Fallvokabular im Text → example",
+     "Ein Fallbeispiel verdeutlicht das. Ein zweites Fallbeispiel folgt. "
+     + PADDING,
+     ["5 Anwendung"], "example"),
+
+    ("Formelsatz bleibt formula-dense",
+     "x = y + z ≤ a ± b ∑ c ∫ d √ e ≥ f ≠ g ∂ h α β γ δ θ λ μ σ π",
+     ["4 Notation"], "formula-dense"),
+
+    ("neutraler Fachtext bleibt prose",
+     "Die Beratung verläuft in Phasen, die aufeinander aufbauen. " + PADDING,
+     ["2.3 Beratung als Prozess"], "prose"),
+]
+
+
+def selftest_paths():
+    """Pfad-Zusagen: `--state` gilt absolut, ein Slug bleibt in `sources/`.
+
+    Die Fälle brauchen echte Verzeichnisse, weil genau Dateisystem-Prädikate
+    geprüft werden — ob `.git` da ist, ob es Datei oder Verzeichnis ist, wohin
+    ein `..` im Slug führt. Ein Mock würde keine dieser Zusagen belegen.
+
+    Gibt (Anzahl Prüfungen, Fehlschläge) zurück, damit der Zähler in
+    `cmd_selftest` nicht als Konstante danebenläuft.
+    """
+    import io
+    import tempfile
+    bad = []
+
+    def aborts(fn, *a):
+        """Läuft fn(*a) und meldet, ob es mit die() abgebrochen ist."""
+        saved, sys.stderr = sys.stderr, io.StringIO()
+        try:
+            fn(*a)
+            return False
+        except SystemExit:
+            return True
+        finally:
+            sys.stderr = saved
+
+    with tempfile.TemporaryDirectory() as tmp:
+        ohne = os.path.join(tmp, "kein-checkout")
+        os.makedirs(ohne)
+        if not aborts(resolve_state, ohne):
+            bad.append(("--state ohne .git bricht ab", "Abbruch", "Rückgabe"))
+
+        # Ein gesetztes, leeres Argument ist nicht dasselbe wie ein fehlendes.
+        if not aborts(resolve_state, ""):
+            bad.append(("--state '' bricht ab", "Abbruch", "Rückgabe"))
+
+        mit = os.path.join(tmp, "checkout")
+        os.makedirs(os.path.join(mit, ".git"))
+        got = resolve_state(mit)
+        if got != os.path.abspath(mit):
+            bad.append(("--state mit .git-Verzeichnis", os.path.abspath(mit), got))
+
+        # `git worktree add` legt .git als DATEI an, nicht als Verzeichnis.
+        wt = os.path.join(tmp, "linked-worktree")
+        os.makedirs(wt)
+        with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+            fh.write("gitdir: %s/.git/worktrees/lw\n" % mit)
+        got = resolve_state(wt)
+        if got != os.path.abspath(wt):
+            bad.append(("--state auf linked worktree", os.path.abspath(wt), got))
+
+        os.makedirs(os.path.join(mit, "sources", "echte-quelle"))
+        got = contained_source(mit, "echte-quelle")
+        want = os.path.realpath(os.path.join(mit, "sources", "echte-quelle"))
+        if got != want:
+            bad.append(("Slug innerhalb sources/", want, got))
+        if not aborts(contained_source, mit, "../../anderswo"):
+            bad.append(("Slug mit .. bricht ab", "Abbruch", "Rückgabe"))
+
+    return 6, bad
+
+
+def cmd_selftest(args):
+    failures = [(name, expected, classify(text, path))
+                for name, text, path, expected in KIND_FIXTURES
+                if classify(text, path) != expected]
+    path_total, path_bad = selftest_paths()
+    failures += path_bad
+    total = len(KIND_FIXTURES) + path_total
+    for name, expected, got in failures:
+        sys.stderr.write("FAIL  %s: erwartet %s, bekommen %s\n"
+                         % (name, expected, got))
+    print("%d/%d Fixtures bestanden" % (total - len(failures), total))
+    if failures:
+        sys.exit(1)
 
 
 # --------------------------------------------------------------------------- #
@@ -1468,6 +1926,16 @@ def main():
     p.add_argument("slug")
     p.add_argument("pdf")
     p.set_defaults(func=cmd_verify)
+
+    p = sub.add_parser("reclassify",
+                       help="kind neu vergeben, ohne das PDF (Bodies bleiben)")
+    p.add_argument("slug")
+    p.add_argument("--dry-run", action="store_true",
+                   help="nur zeigen, was sich änderte")
+    p.set_defaults(func=cmd_reclassify)
+
+    p = sub.add_parser("selftest", help="Fixtures der kind-Heuristik prüfen")
+    p.set_defaults(func=cmd_selftest)
 
     p = sub.add_parser("map-add", help="Zeile in sources/MAP.md schreiben")
     p.add_argument("--topic", required=True)

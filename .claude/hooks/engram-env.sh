@@ -19,7 +19,9 @@
 # checkouts (/home/user) rather than the repo itself. BASH_SOURCE stays high in the
 # list because it is exact whenever this file is sourced by path; the fixed paths at
 # the end are the backstop for that parent-directory case — same precedent as
-# engram_source.py:132, which hardcodes /home/user/engram-learning for the state repo.
+# resolve_state() in engram_source.py, which hardcodes /home/user/engram-learning
+# for the state repo. (Named, not numbered: a line number here goes stale the
+# first time that file grows, and silently.)
 ENGRAM_PROJECT=""
 for _p in "${ENGRAM_ROOT:-}" \
           "${CLAUDE_PROJECT_DIR:-}" \
