@@ -217,19 +217,43 @@ NUMBERED_MULTI = re.compile(r"^\d+(?:\.\d+)+\s+\S")
 TOC_LINE = re.compile(r"(\.\s?){4,}\s*\d{1,4}\s*$")
 TOC_LINE_ANY = re.compile(r"(\.\s?){4,}\s*\d{1,4}\b")
 
-# Inhaltsverzeichnis OHNE erkennbare Punktführung. Die Punkte überleben die
-# Textextraktion nicht immer — mal bleibt nur Leerraum ("… und Beratung   22"),
-# mal ein Rest ("… zeigen?  ...  426"). Für die Zeile zählt deshalb der andere
-# Marker: Am Ende steht eine Seitenzahl, abgesetzt durch mindestens zwei
-# Leerzeichen. Ein angeklebter Fußnotenzeiger ("… Transaktionsanalyse17") hat
-# diesen Abstand nicht und bleibt eine Überschrift.
-TOC_LINE_SPACED = re.compile(r"\S\s{2,}[.\s]*\d{1,4}\s*$")
+# Inhaltsverzeichnis OHNE erkennbare Punktführung: Titel, Leerraum, Seitenzahl.
+# Zwei Dokumente verlangen dasselbe Muster, und beide Messungen stehen hier —
+# aus ihnen ergeben sich die zwei Lockerungen gegenüber der naheliegenden Form:
+#
+#   "15. Supervision         31"  (Word-Export, gemessen: neun Leerzeichen)
+#   "… Mediation und Beratung   22"
+#   "… zeigen?  ...  426"         (Punktführung nur als Rest überlebt)
+#
+# Deshalb ZWEI Leerzeichen als Untergrenze, nicht drei, und ein optionaler
+# Punktrest davor. Die dritte Fundstelle ist die, die eine Schwelle von drei
+# verpasst; TOC_LINE greift dort nicht, weil vier Punkte verlangt sind.
+#
+# Was diese Lockerung tragbar macht, ist NICHT die Zahl, sondern der Ort: Das
+# Muster wird ausschließlich auf Zeilen angewandt, die schon als nummeriert
+# erkannt sind (siehe is_toc_line). Eine Versalzeile wie "KAPITEL   2" oder eine
+# Überschrift wie "Anlage 7" kommt gar nicht erst hier an — sie trägt keine
+# Gliederungsnummer. Ein angeklebter Fußnotenzeiger ("… Transaktionsanalyse17")
+# hat den Abstand nicht und bleibt ohnehin eine Überschrift.
+TOC_SPACED = re.compile(r"\S\s{2,}[.\s]*\d{1,4}\s*$")
 
 
 def is_toc_line(line):
-    """Verzeichniszeile: Titel, dann abgesetzt die Seitenzahl."""
+    """Verzeichniszeile: Titel, dann abgesetzt die Seitenzahl.
+
+    **Nur auf nummerierte Zeilen anwenden.** `TOC_SPACED` erkennt ein Verzeichnis
+    am Leerraum vor der Zahl, und dieses Merkmal allein ist zu schwach: Es trifft
+    auch "KAPITEL   2" und "ABBILDUNG  12". Erst zusammen mit der Gliederungs-
+    nummer wird daraus ein Beleg. Alle drei Aufrufer prüfen die Nummer vorher —
+    `numbered_toc_page` über `NUMBERED`, `breaks_paragraph` über
+    `NUMBERED_MULTI`, `is_heading` im `--numbered-dot`-Zweig über `numbered`.
+
+    Wo eine Zeile ohne diese Vorprüfung als Verzeichniszeile gelten soll, ist
+    `TOC_LINE` das richtige Muster: Vier Punkte Punktführung sind für sich
+    genommen eindeutig, Leerraum ist es nicht.
+    """
     s = line.strip()
-    return bool(TOC_LINE.search(s) or TOC_LINE_SPACED.search(s))
+    return bool(TOC_LINE.search(s) or TOC_SPACED.search(s))
 
 
 def numbered_toc_page(lines, minimum=3):
@@ -276,20 +300,6 @@ def breaks_paragraph(line):
     if is_toc_line(s) or TOC_LINE_ANY.search(s):
         return False
     return True
-
-# Inhaltsverzeichnis OHNE Punktführung — Titel, Leerraum, Seitenzahl, so wie es
-# aus einem Word-Export kommt: "15. Supervision         31". Die drei Leerzeichen
-# im Muster sind die Untergrenze, keine Beschreibung; gemessen am Konzept einer
-# Adaptionseinrichtung stehen dort neun.
-#
-# Nicht auf `\s+` lockern: Dann verwirft die Regel auch "Anlage 7" und jede
-# andere Überschrift, die auf eine Zahl endet. Ein Inhaltsverzeichnis erkennt
-# man am Leerraum, nicht an der Zahl.
-#
-# Wird nur im `--numbered-dot`-Modus und nur auf nummerierten Zeilen geprüft:
-# Ohne ihn scheitert "15. Supervision 31" ohnehin schon an NUMBERED_PLAIN, und
-# die Vorgabe soll unverändert bleiben.
-TOC_SPACED = re.compile(r"\S\s{3,}\d{1,4}\s*$")
 
 
 def normalize_chars(text):
@@ -390,7 +400,11 @@ def is_heading(line, in_numbered_toc=False):
     s = line.strip()
     if not (2 <= len(s) <= 90):
         return False
-    if is_toc_line(s):
+    # Hier nur die Punktführung: Sie ist für sich genommen eindeutig. Der
+    # Leerraum-Marker aus `is_toc_line` braucht eine Gliederungsnummer neben
+    # sich und darf deshalb erst hinter der Nummernprüfung stehen — ungeprüft
+    # verwürfe er "KAPITEL   2" und "ABBILDUNG  12".
+    if TOC_LINE.search(s):
         return False
     numbered = NUMBERED.match(s)
     if numbered and in_numbered_toc:
@@ -406,9 +420,9 @@ def is_heading(line, in_numbered_toc=False):
         #
         # Nur für NUMMERIERTE Zeilen — `--numbered-dot` erweitert, was als Nummer
         # zählt, und darf deshalb auch nur dort strenger sein. Ungeprüft griff
-        # TOC_SPACED sonst auf unnummerierte Versalzeilen über und verwarf
-        # "KAPITEL   2" allein wegen des Modus.
-        if TOC_SPACED.search(s) or s.endswith((".", ",", ";", ":", "!", "?")):
+        # der Leerraum-Marker sonst auf unnummerierte Versalzeilen über und
+        # verwarf "KAPITEL   2" allein wegen des Modus.
+        if is_toc_line(s) or s.endswith((".", ",", ";", ":", "!", "?")):
             return False
     if numbered:
         return True
