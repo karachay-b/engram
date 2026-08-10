@@ -123,9 +123,28 @@ def resolve_state(explicit=None):
 
     Der Hook ist die Referenz; wer hier eine eigene Suche erfindet, baut den
     zweiten Pfad, der bei der nächsten Umgebungsänderung auseinanderläuft.
+
+    `--state` ist davon ausgenommen und gilt absolut: Trägt der Pfad kein
+    Checkout, bricht der Aufruf ab, statt auf die Suchkette zurückzufallen. Der
+    Unterschied ist kein Feinschliff — beim Testen von `reclassify` lief genau
+    dieser Rückfall auf das ECHTE Repo, während die Ausgabe wie ein bestandener
+    Isolationstest aussah. Ein Argument, das der Aufrufer ausdrücklich setzt,
+    darf nicht stillschweigend umgeleitet werden.
+
+    Die Umgebungsvariablen bleiben Teil der Suchkette: Dort ist das
+    Durchfallen gewollt und im Hook so dokumentiert ("first hit wins",
+    ENGRAM_STATE_REPO als Notausgang für ein Checkout an ungewohnter Stelle).
     """
+    if explicit:
+        chosen = os.path.abspath(explicit)
+        if not os.path.isdir(os.path.join(chosen, ".git")):
+            die("--state %s ist kein Git-Checkout (kein .git/ darin). Ohne "
+                "Repo hätten die Quellen keinen Ort, der den Container "
+                "überlebt — und stillschweigend woanders hin zu schreiben "
+                "wäre schlimmer als der Abbruch." % explicit)
+        return chosen
+
     candidates = [
-        explicit,
         os.environ.get("ENGRAM_STATE"),
         os.environ.get("ENGRAM_STATE_REPO"),
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..",
@@ -1526,17 +1545,48 @@ KIND_FIXTURES = [
 ]
 
 
+def selftest_resolve_state():
+    """`--state` muss absolut gelten — der Rückfall war ein stiller Fehlschlag.
+
+    Der Fall braucht echte Verzeichnisse, weil genau das Dateisystem-Prädikat
+    geprüft wird (`.git/` vorhanden oder nicht). Ein Mock würde die Zusage
+    nicht belegen.
+    """
+    import io
+    import tempfile
+    bad = []
+    with tempfile.TemporaryDirectory() as tmp:
+        ohne = os.path.join(tmp, "kein-checkout")
+        os.makedirs(ohne)
+        saved, sys.stderr = sys.stderr, io.StringIO()
+        try:
+            got = resolve_state(ohne)
+            bad.append(("--state ohne .git bricht ab", "Abbruch", got))
+        except SystemExit:
+            pass
+        finally:
+            sys.stderr = saved
+
+        mit = os.path.join(tmp, "checkout")
+        os.makedirs(os.path.join(mit, ".git"))
+        got = resolve_state(mit)
+        if got != os.path.abspath(mit):
+            bad.append(("--state mit .git wird übernommen",
+                        os.path.abspath(mit), got))
+    return bad
+
+
 def cmd_selftest(args):
-    failed = 0
-    for name, text, path, expected in KIND_FIXTURES:
-        got = classify(text, path)
-        if got != expected:
-            failed += 1
-            sys.stderr.write("FAIL  %s: erwartet %s, bekommen %s\n"
-                             % (name, expected, got))
-    total = len(KIND_FIXTURES)
-    print("%d/%d kind-Fixtures bestanden" % (total - failed, total))
-    if failed:
+    failures = [(name, expected, classify(text, path))
+                for name, text, path, expected in KIND_FIXTURES
+                if classify(text, path) != expected]
+    failures += selftest_resolve_state()
+    total = len(KIND_FIXTURES) + 2
+    for name, expected, got in failures:
+        sys.stderr.write("FAIL  %s: erwartet %s, bekommen %s\n"
+                         % (name, expected, got))
+    print("%d/%d Fixtures bestanden" % (total - len(failures), total))
+    if failures:
         sys.exit(1)
 
 

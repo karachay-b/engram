@@ -78,6 +78,11 @@ Was ein Buch besser liefert als eine Websuche: verbindliche **Definitionen**, di
 | `map-check` | `MAP.md` gegen Engine und `sources/` abgleichen |
 | `paths` | State-Repo und `sources/` auflösen |
 
+Das globale `--state <pfad>` überschreibt die Suche nach dem State-Repo und gilt
+**absolut**: Trägt der Pfad kein `.git/`, bricht der Aufruf ab, statt auf die
+Suchkette zurückzufallen. Ohne das Flag gilt die Kette aus
+`.claude/hooks/engram-env.sh` unverändert.
+
 `--pages` ist der wichtigste Schalter: **immer den Scope einschränken**, wenn nur
 Teile des Buchs gebraucht werden. Ein ganzes Lehrbuch zu ingesten, von dem drei
 Kapitel relevant sind, produziert einen Index, der das Kontextbudget frisst, bevor
