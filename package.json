@@ -1,6 +1,6 @@
 {
   "name": "opencode-engram-learning",
-  "version": "1.10.1",
+  "version": "1.11.1",
   "description": "Evidence-based learning engine for OpenCode \u2014 learn anything, verify by free recall, schedule with FSRS, adapt from your own data.",
   "type": "module",
   "license": "MIT",
@@ -25,10 +25,16 @@
     "plugin",
     "learning",
     "fsrs",
-    "spaced-repetition"
+    "spaced-repetition",
+    "pi-package"
   ],
   "engines": {
     "opencode": ">=1.0.0"
+  },
+  "pi": {
+    "extensions": ["./pi/engram.ts"],
+    "skills": ["./skills"],
+    "prompts": ["./pi/prompts"]
   },
   "files": [
     ".opencode-plugin",
@@ -39,7 +45,12 @@
     "docs",
     "gold",
     "experiments",
-    ".claude-plugin"
+    ".claude-plugin",
+    "pi",
+    "INSTALL-PI.md",
+    "INSTALL-CODEX.md",
+    "INSTALL-HERMES.md",
+    "INSTALL-OPENCLAW.md"
   ],
   "repository": {
     "type": "git",

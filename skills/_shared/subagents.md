@@ -10,9 +10,10 @@ implementation detail — it is the thing that makes the receipts worth anything
 | `engram-artifact-smith` | build an interactive explorable | long, tool-heavy work that shouldn't block the beats |
 
 On Claude Code, Codex, OpenCode, and Antigravity these are registered agents and
-"spawn X" is literal. **OpenClaw registers none of them** — it reads Engram as a
-Codex bundle, and bundles map skills only; `agents/` is not a mapped capability
-in any bundle format. So on OpenClaw you construct the same isolation yourself.
+"spawn X" is literal. **OpenClaw and Pi register none of them** — OpenClaw reads
+Engram as a Codex bundle, and bundles map skills only; Pi ships no subagent
+mechanism at all, by design. On both you construct the same isolation yourself,
+from the platform's shape below.
 
 ## The OpenClaw shape
 
@@ -43,6 +44,52 @@ the file keeps one definition of each agent across every platform. Never paste a
 copy of the assessor's rules into the task text: two copies drift, and the one
 that drifts is the one grading.
 
+## The Pi shape
+
+Pi (pi.dev) has no subagent tool, but it has the one primitive isolation
+actually needs: **a fresh process is a fresh context.** (The shape generalizes:
+on any platform whose only primitive is a shell, the child is a fresh
+non-interactive run of *that platform's own* agent binary — substitute yours
+for `pi` below.) Spawn the child through the bash tool as a non-interactive
+pi run:
+
+```bash
+ENGRAM_CHILD=1 pi --no-session --no-skills --no-context-files -p \
+  "Read <ENGRAM_ROOT>/agents/engram-assessor.md and follow it exactly as your
+   operating instructions. Grade the items in <the file you wrote with \`stash list > …\`>.
+   Write the receipt JSON it specifies to <receipt path> with the write tool —
+   no commentary, no other output."
+```
+
+Resolve `<ENGRAM_ROOT>` as the directory holding `scripts/engram.py` — on Pi
+that is the `$ENGRAM_ROOT` its extension exports (equivalently: `$ENGRAM` as
+your skill resolved it, with the trailing `/scripts/engram.py` removed). Why
+each flag is load-bearing:
+
+- `ENGRAM_CHILD=1` — makes Engram's own extension inert in the child, so the
+  session-start nudge cannot leak into a grader's context. (`-p` alone already
+  suppresses it — `ctx.hasUI` is false in print mode — the env var is the belt
+  to that suspender.)
+- `--no-session` — grading runs are ephemeral; don't litter session storage.
+- `--no-skills` — the child needs no skill list; a leaner system prompt is a
+  cheaper, cleaner grader.
+- `--no-context-files` — the project's AGENTS.md / CLAUDE.md must not reach the
+  assessor. Project context isn't lesson dialogue, but blindness is easiest to
+  defend when the child sees nothing but the agent file and the items.
+- **Leave extensions on** (no `--no-extensions`): custom model providers arrive
+  as pi extensions, and the child must reach whatever provider the parent uses.
+  Engram's extension self-silences via the two guards above.
+
+**Collect the receipt from the file you named, never from stdout.** `-p` prints
+the model's final prose, and models garnish stdout; the write-tool file is the
+reliable channel. Read it, validate it, then proceed exactly as on any other
+platform. A grading run takes a minute or two — raise your bash timeout rather
+than concluding the child hung.
+
+The architect and the smith spawn the same way — swap the agent file and the
+task text. The child uses the learner's configured default pi model; pass
+`--model` only when they asked for a specific one.
+
 ## Rules that do not bend
 
 - **Items go by file path, never inline.** Learner productions in a task string
@@ -55,9 +102,15 @@ that drifts is the one grading.
 - **No dialogue in the task text.** Not the lesson, not your read on how the
   session went, not "they seemed to get it." The assessor sees claims, rubrics,
   probes, productions, and pre-feedback confidence — that list is exhaustive.
-- **If `sessions_spawn` is unavailable, stop and say so.** It sits behind tool
-  policy: the `coding` and `full` profiles include it, `messaging` and `minimal`
-  do not. Without it there is no blind grader, and Engram does not have a
-  degraded mode where the tutor grades its own learner. Tell the user to set
+- **If your platform's spawn mechanism is unavailable, stop and say so.** This
+  bullet is for the construct-it-yourself platforms above — where "spawn X" is
+  literal (a registered subagent/Task tool), just use it; this is not a licence
+  to halt because some *other* platform's tool is absent. On OpenClaw,
+  `sessions_spawn` sits behind tool policy: the `coding` and `full` profiles
+  include it, `messaging` and `minimal` do not — tell the user to set
   `tools.profile: "coding"` or add `tools.alsoAllow: ["sessions_spawn",
-  "sessions_yield"]`, and do not issue receipts until they have.
+  "sessions_yield"]`, and do not issue receipts until they have. On Pi, the
+  same rule binds: if the `pi -p` child cannot be spawned from the bash tool,
+  stop and say so — do not grade inline. Either way, without the spawn there
+  is no blind grader, and Engram has no degraded mode where the tutor grades
+  its own learner.

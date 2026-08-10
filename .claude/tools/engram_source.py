@@ -180,7 +180,28 @@ LIGATURES = {"ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi",
 # typografische Unterschied trägt: Eine Gliederungsnummer ist entweder mehrstufig
 # ("2.1.1 Titel") oder einstufig OHNE Punkt ("3 Die Basistechniken") — ein
 # Listenpunkt schreibt sich "3.".
-NUMBERED = re.compile(r"^(\d+(?:\.\d+)+)\s+\S|^(\d+)\s+\S")
+NUMBERED_PLAIN = re.compile(r"^(\d+(?:\.\d+)+)\s+\S|^(\d+)\s+\S")
+
+# …aber diese Typografie ist nicht universell. Behördennahe deutsche Dokumente
+# (Konzepte, Berichte, Anträge) nummerieren ihre Kapitel regelmäßig "1. Titel"
+# MIT Punkt. Für sie ist die Regel oben genau falsch herum: Sie verwirft die
+# echten Kapitel und lässt nur die tiefer gestaffelten "7.1"-Unterpunkte übrig.
+#
+# Beide Konventionen gleichzeitig zu bedienen geht nicht — dieselbe Zeichenfolge
+# ist im einen Dokument Kapitel, im anderen Listenpunkt. Deshalb `--numbered-dot`
+# als Schalter pro Dokument, per Vorgabe aus. Gemessen am Konzept einer
+# Adaptionseinrichtung: ohne Schalter 3 von 15 Kapiteln erkannt, mit Schalter 15.
+NUMBERED_DOTTED = re.compile(r"^(\d+(?:\.\d+)+)\.?\s+\S|^(\d+)\.?\s+\S")
+
+NUMBERED = NUMBERED_PLAIN
+DOTTED_HEADINGS = False
+
+
+def set_heading_style(dotted):
+    """`--numbered-dot` scharfstellen. Nur `cmd_add` ruft das."""
+    global NUMBERED, DOTTED_HEADINGS
+    DOTTED_HEADINGS = bool(dotted)
+    NUMBERED = NUMBERED_DOTTED if dotted else NUMBERED_PLAIN
 
 # Die MEHRSTUFIGE Form allein ("2.1.1 Titel"). Sie ist die einzige, die stark
 # genug ist, um einen laufenden Absatz zu unterbrechen — siehe clean_page().
@@ -255,6 +276,20 @@ def breaks_paragraph(line):
     if is_toc_line(s) or TOC_LINE_ANY.search(s):
         return False
     return True
+
+# Inhaltsverzeichnis OHNE Punktführung — Titel, Leerraum, Seitenzahl, so wie es
+# aus einem Word-Export kommt: "15. Supervision         31". Die drei Leerzeichen
+# im Muster sind die Untergrenze, keine Beschreibung; gemessen am Konzept einer
+# Adaptionseinrichtung stehen dort neun.
+#
+# Nicht auf `\s+` lockern: Dann verwirft die Regel auch "Anlage 7" und jede
+# andere Überschrift, die auf eine Zahl endet. Ein Inhaltsverzeichnis erkennt
+# man am Leerraum, nicht an der Zahl.
+#
+# Wird nur im `--numbered-dot`-Modus und nur auf nummerierten Zeilen geprüft:
+# Ohne ihn scheitert "15. Supervision 31" ohnehin schon an NUMBERED_PLAIN, und
+# die Vorgabe soll unverändert bleiben.
+TOC_SPACED = re.compile(r"\S\s{3,}\d{1,4}\s*$")
 
 
 def normalize_chars(text):
@@ -355,13 +390,28 @@ def is_heading(line, in_numbered_toc=False):
     s = line.strip()
     if not (2 <= len(s) <= 90):
         return False
-    if TOC_LINE.search(s):
+    if is_toc_line(s):
         return False
-    if NUMBERED.match(s):
+    numbered = NUMBERED.match(s)
+    if numbered and in_numbered_toc:
         # Auf einer Verzeichnisseite mit nummerierten Einträgen zählt die Nummer
         # nicht mehr als Beleg — dort ist sie das Merkmal des Eintrags selbst.
         # Siehe numbered_toc_page().
-        return not in_numbered_toc
+        return False
+    if DOTTED_HEADINGS and numbered:
+        # In diesem Modus ist die Nummer kein Beweis mehr — "13. Waschen und
+        # Trocknen sind nur im dafür vorgesehenen Raum erlaubt." trägt dieselbe
+        # Nummernform wie ein Kapitel. Der Satzschluss trennt beide: Eine
+        # Überschrift endet nicht auf Satzzeichen, ein Listensatz schon.
+        #
+        # Nur für NUMMERIERTE Zeilen — `--numbered-dot` erweitert, was als Nummer
+        # zählt, und darf deshalb auch nur dort strenger sein. Ungeprüft griff
+        # TOC_SPACED sonst auf unnummerierte Versalzeilen über und verwarf
+        # "KAPITEL   2" allein wegen des Modus.
+        if TOC_SPACED.search(s) or s.endswith((".", ",", ";", ":", "!", "?")):
+            return False
+    if numbered:
+        return True
     if s.endswith((".", ",", ";", ":", "!", "?")):
         return False
     letters = [c for c in s if c.isalpha()]
@@ -931,6 +981,8 @@ def cmd_add(args):
     ensure_pypdf()
     from pypdf import PdfReader
 
+    set_heading_style(getattr(args, "numbered_dot", False))
+
     state = resolve_state(args.state)
     path, temp = fetch_if_url(args.pdf)
     if not os.path.isfile(path):
@@ -1023,6 +1075,7 @@ def cmd_add(args):
         "page_labels": ("gedruckt (Versatz %+d)" % page_offset) if page_offset
                        else "PDF-Seitenzahl",
         "boundaries": boundary,
+        "heading_style": "1. Titel" if DOTTED_HEADINGS else "1 Titel",
         "outline": bool(entries),
         "rights": "urheberrechtlich geschützt — Derivate privat, nicht weitergeben",
     }
@@ -1375,6 +1428,10 @@ def main():
     p.add_argument("--author")
     p.add_argument("--pages", help="Scope, z.B. 51-190")
     p.add_argument("--scope-label", help="lesbare Scope-Angabe, z.B. 'Kap. 3–7'")
+    p.add_argument("--numbered-dot", action="store_true",
+                   help="Kapitel sind '1. Titel' MIT Punkt (deutsche Konzept- "
+                        "und Berichtstypografie). Vorgabe aus — in Sachbüchern "
+                        "ist '1.' ein Listenpunkt, kein Kapitel.")
     p.add_argument("--keep-pdf", action="store_true",
                    help="Original nach <slug>/pdf/ kopieren (gitignored)")
     p.set_defaults(func=cmd_add)

@@ -13,6 +13,7 @@ You are the coach: you adapt **only from receipts and telemetry, never vibes**, 
 for d in "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
          "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/extensions/engram" \
          "$HOME/.gemini/config/plugins/engram" \
+         "$HOME/.pi/agent/git/github.com/nagisanzenin/engram" \
          "$PWD" "$(git rev-parse --show-toplevel 2>/dev/null)"; do
   [ -n "$d" ] && [ -f "$d/scripts/engram.py" ] && ENGRAM="$d/scripts/engram.py" && break
 done
@@ -26,7 +27,7 @@ python3 "$ENGRAM" experiment list
 python3 "$ENGRAM" misconception list
 ```
 
-**Spawning agents.** "Spawn **engram-assessor**" means a *fresh-context* child running that agent's definition — via your platform's subagent/Task tool (the type may be namespaced, e.g. `engram:engram-assessor`). **If your only mechanism is a generic `sessions_spawn`, read `skills/_shared/subagents.md` first.** Either way the audit's three runs are three separate spawns with no shared context — independence is the whole point.
+**Spawning agents.** "Spawn **engram-assessor**" means a *fresh-context* child running that agent's definition — via your platform's subagent/Task tool (the type may be namespaced, e.g. `engram:engram-assessor`). **If your only mechanism is a generic `sessions_spawn` — or you have no spawn tool at all (Pi) — read `skills/_shared/subagents.md` first.** Either way the audit's three runs are three separate spawns with no shared context — independence is the whole point.
 
 ## 0 · The binding constraint — report this FIRST, before any other number (v0.6)
 
