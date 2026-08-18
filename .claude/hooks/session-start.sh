@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # SessionStart hook — makes Engram usable in Claude Code on the web.
 #
+#   0. prints ORIENTIERUNG.md — compact briefing on both repos, the five
+#      commands, the binding rules
 #   1. points ENGRAM_HOME at the private state repo, so the learning state
 #      survives the container being reclaimed
 #   2. runs `engram.py init` (idempotent)
 #   3. surfaces due reviews — Engram's own two-line nudge, silent when nothing
-#      is due
+#      is due — then a cached, at-most-daily check for whether upstream
+#      (nagisanzenin/engram) has moved on
 #   4. installs node deps so `bun run test` / `npx tsc --noEmit` work
 #
 # Runs synchronously: the due nudge has to be on screen before the first turn.
@@ -40,6 +43,13 @@ command -v python3 >/dev/null 2>&1 || {
   exit 0
 }
 
+# --- 0b. Briefing --------------------------------------------------------------
+# Kompakte Orientierung vor allem anderen: was die beiden Repos tun, wie sie
+# verzahnt sind, die fünf Kommandos, die drei bindenden Regeln. CLAUDE.md bleibt
+# das ausführliche Nachschlagewerk; das hier ist das, was jede Session verlässlich
+# lesen soll. Fehlt die Datei (älterer Checkout), einfach weiter.
+[ -f "$ENGRAM_PROJECT/.claude/ORIENTIERUNG.md" ] && cat "$ENGRAM_PROJECT/.claude/ORIENTIERUNG.md"
+
 # --- 1. state location --------------------------------------------------------
 if [ -n "$ENGRAM_STATE" ]; then
   mkdir -p "$ENGRAM_HOME" 2>/dev/null
@@ -60,6 +70,12 @@ fi
 python3 "$ENGRAM_PROJECT/scripts/engram.py" init >/dev/null 2>&1
 python3 "$ENGRAM_PROJECT/scripts/engram.py" session-start 2>/dev/null \
   | sed -E 's#/(learn|review|coach)\b#/engram-\1#g' || true
+
+# --- 3a. upstream sync check ----------------------------------------------------
+# At most once/day (cached), non-fatal, never blocks: a network hiccup here must
+# never delay or break the session. See engram-sync-check.sh for the ancestry test
+# (git ls-remote + cat-file -e, no fetch, no remote added, no repo mutation).
+[ -f "$HOOK_DIR/engram-sync-check.sh" ] && bash "$HOOK_DIR/engram-sync-check.sh" 2>/dev/null || true
 
 # --- 3b. interests gate ---------------------------------------------------------
 # Topics exist but `interests` is empty: that combination is the signature of a
