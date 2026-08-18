@@ -18,7 +18,7 @@ eigentliche Lern-Engine hinter den drei Kommandos.
 | `/engram-review` | `/review` | `review` kollidiert mit Claude Codes GitHub-PR-Review |
 | `/engram-coach` | `/coach` | einheitliches Präfix |
 | `/engram-source` | — | kein Upstream-Pendant; siehe „Quellen" unten |
-| `/engram-status` | — | kein Upstream-Pendant; Momentaufnahme (Quellen, Lernpfad-Stand, Fälligkeiten) als geteilte Seite — siehe `.claude/skills/engram-status/SKILL.md`. Ersetzt nicht `/engram-coach dashboard` (Telemetrie/Tuning); ergänzt es um die Quellen-Sicht, die die Engine nicht kennt. |
+| `/engram-status` | — | kein Upstream-Pendant; Momentaufnahme (Quellen, Lernpfad-Stand, Fälligkeiten) — Text sofort, optional als geteilte Seite — siehe `.claude/skills/engram-status/SKILL.md`. Ersetzt nicht `/engram-coach dashboard` (Telemetrie/Tuning); ergänzt es um die Quellen-Sicht, die die Engine nicht kennt. |
 
 `.claude/skills/engram-*/SKILL.md` sind dünne Aliase: sie enthalten nur Frontmatter
 und die Anweisung, das echte `skills/<name>/SKILL.md` zu lesen und **wörtlich** zu
@@ -132,7 +132,10 @@ ohne die Engine anzufassen.
 - **Werkzeug:** `.claude/tools/engram_source.py`, getrieben von `/engram-source`.
   Ein PDF wird **einmal** deterministisch zerlegt: Manifest (`source.json`), ein
   kleines Kartenblatt (`index.md`) und Chunks von 400–1200 Wörtern mit
-  `[S. n]`-Markern an jedem Seitenumbruch.
+  `[S. n]`-Markern an jedem Seitenumbruch. Sein Geschwisterwerkzeug
+  `.claude/tools/engram_status.py` (getrieben von `/engram-status`) liest diese
+  Manifeste plus `MAP.md` mit — nicht zum Ingesten, sondern für die
+  Standortbestimmung; beide teilen sich `resolve_state()`.
 - **Ablage:** `<engram-learning>/sources/<slug>/` — neben `learning/`, nicht darin.
   `learning/` gehört der Engine; ein Fremdverzeichnis dort würde mit einer künftigen
   Upstream-Funktion kollidieren.
@@ -356,7 +359,15 @@ Fixtures, die aus echtem Material gezogen sind:
 python3 .claude/tools/engram_source.py selftest
 ```
 
-Er hängt **nicht** in `.github/workflows/test.yml`, und das ist Absicht: Die
+Ebenso der Selftest des Status-Werkzeugs — hermetisch, ohne den echten State-Repo zu
+berühren, prüft u. a. die Vertraulichkeitsgrenze (dass `probe`/`claim`/`rubric`/
+`transfer_probe` nie in die Ausgabe gelangen):
+
+```bash
+python3 .claude/tools/engram_status.py selftest
+```
+
+Beide hängen **nicht** in `.github/workflows/test.yml`, und das ist Absicht: Die
 Workflow-Datei ist Upstream-Code, ein Schritt darin wäre der erste Konflikt beim
-nächsten `git merge upstream/main`. Wer die Marker in `engram_source.py` anfasst,
-ruft ihn von Hand auf.
+nächsten `git merge upstream/main`. Wer die Marker in `engram_source.py` oder
+`engram_status.py` anfasst, ruft den jeweiligen Selftest von Hand auf.
