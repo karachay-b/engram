@@ -10,7 +10,7 @@ und diese Datei gehören zum Cloud-Setup; alles andere ist unveränderter Upstre
 Das folgende Kapitel „Upstream-Codebase" beschreibt diesen unveränderten Teil — die
 eigentliche Lern-Engine hinter den drei Kommandos.
 
-## Die drei Kommandos
+## Die Kommandos
 
 | Hier | Upstream-Doku | Warum umbenannt |
 |---|---|---|
@@ -18,11 +18,14 @@ eigentliche Lern-Engine hinter den drei Kommandos.
 | `/engram-review` | `/review` | `review` kollidiert mit Claude Codes GitHub-PR-Review |
 | `/engram-coach` | `/coach` | einheitliches Präfix |
 | `/engram-source` | — | kein Upstream-Pendant; siehe „Quellen" unten |
+| `/engram-status` | — | kein Upstream-Pendant; Momentaufnahme (Quellen, Lernpfad-Stand, Fälligkeiten) als geteilte Seite — siehe `.claude/skills/engram-status/SKILL.md`. Ersetzt nicht `/engram-coach dashboard` (Telemetrie/Tuning); ergänzt es um die Quellen-Sicht, die die Engine nicht kennt. |
 
 `.claude/skills/engram-*/SKILL.md` sind dünne Aliase: sie enthalten nur Frontmatter
 und die Anweisung, das echte `skills/<name>/SKILL.md` zu lesen und **wörtlich** zu
 befolgen. Die Upstream-Skills bleiben unangetastet — deshalb kollidiert ein Update
-nie. Die Subagents unter `.claude/agents/` sind Symlinks nach `agents/`.
+nie. `engram-status` hat kein Upstream-Pendant und ist deshalb wie `engram-source`
+vollständig selbst geschrieben, kein dünner Alias. Die Subagents unter `.claude/agents/`
+sind Symlinks nach `agents/`.
 
 ## Lernstand: wo er liegt und warum er gepusht werden muss
 
@@ -103,6 +106,22 @@ Reihenfolge:
 
 Der Suchpfad des Hooks: `$ENGRAM_STATE_REPO` → `<repo>/../engram-learning` →
 `/home/user/engram-learning` → `$HOME/engram-learning`.
+
+### Briefing und Upstream-Sync-Check beim Sessionstart
+
+`session-start.sh` gibt vor der Fälligkeits-Nudge `.claude/ORIENTIERUNG.md` wörtlich
+aus — ein kompaktes Briefing (beide Repos, ihre Verzahnung, die Kommandos, die drei
+bindenden Regeln), gedacht als das, was jede Session verlässlich liest. Diese `CLAUDE.md`
+bleibt das ausführliche Nachschlagewerk.
+
+Nach der Nudge läuft `.claude/hooks/engram-sync-check.sh`: höchstens einmal pro Tag
+(Cache unter `~/.cache/engram/upstream-check`) ein `git ls-remote` gegen
+`nagisanzenin/engram`, ob `refs/heads/main` lokal bereits als Commit vorliegt
+(`git cat-file -e <sha>^{commit}`, ohne `fetch`, ohne Remote anzulegen). Liegt er nicht
+vor, meldet der Hook eine Zeile mit dem neuesten stabilen Tag (Release-Candidates wie
+`-rc1` werden herausgefiltert). Jeder Netzwerkfehler bleibt still und schreibt den Cache
+nicht — der nächste Sessionstart versucht es erneut. Stimmt der Nutzer der Meldung zu,
+gilt die Prozedur aus „Updates vom Entwickler übernehmen" unten.
 
 ## Quellen: Bücher und PDFs als Lernstoff
 
@@ -230,7 +249,7 @@ weder Lerndaten überschreiben noch Konflikte auslösen.
 git remote add upstream https://github.com/nagisanzenin/engram.git   # einmalig
 git fetch upstream
 git merge upstream/main
-python3 scripts/engram.py selftest    # muss 302/302 (oder mehr) bestehen
+python3 scripts/engram.py selftest    # muss 315/315 (oder mehr) bestehen
 ```
 
 Alternativ der "Sync fork"-Button auf GitHub. Nach jedem Update den Selftest laufen
@@ -239,8 +258,9 @@ lassen — er ist die Gegenprobe, dass die Engine intakt ist.
 Ändert Upstream die Namen oder Frontmatter-Beschreibungen der Skills, müssen die
 `description`-Zeilen in `.claude/skills/engram-*/SKILL.md` nachgezogen werden.
 
-Zweite bewusste Duplizierung: der **Bootstrap-Block** steht wörtlich in allen vier
-Alias-Skills. Ein gemeinsamer Ort ginge nicht — der Block ist genau das Stück Code,
+Zweite bewusste Duplizierung: der **Bootstrap-Block** steht wörtlich in allen fünf
+Alias-/Cloud-Skills (`engram-learn`, `engram-review`, `engram-coach`, `engram-source`,
+`engram-status`). Ein gemeinsamer Ort ginge nicht — der Block ist genau das Stück Code,
 das den gemeinsamen Ort erst findet. Upstream duplizert seinen eigenen Resolver aus
 demselben Grund über `skills/{learn,review,coach}/SKILL.md`. Wer den Block ändert,
 ändert ihn viermal.
