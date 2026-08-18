@@ -13,6 +13,21 @@ Run these beats in order. Never skip a beat because the learner seems smart or i
 > `probe` instance whose solution was just shown). Beats 1, 5–6, 8 and every rule below
 > bind unchanged. Concept and fact nodes: this file exactly as written.
 
+> **Contrast-first opening (P18, docs/16 §3)** — for `concept` nodes only, when **all
+> four** hold: the node is not `arbitrary: true`; the learner's prior knowledge is above
+> the novice floor (pretest solid, or its `requires` carry receipts — **when this gate and
+> any default disagree, the novice gate wins**: when unsure, assist); the node does not
+> carry `interactivity: "high"` (working-memory overload flips the evidence to
+> instruction-first); and the node carries an authored `contrast` set (`deep_feature`,
+> `cases`, `invite`) — never improvise one mid-session, a muddy case set is worse than
+> none. Then beat 2 becomes: serve the cases → the learner commits **at least two candidate
+> rules or explanations, ranked**, before any feedback. The firewall is on **content, not
+> support**: H1–H2 (orient / activate) stay live during invention; H3–H4 and every
+> correctness signal are withheld until RESOLVE. Beat 4 must then open **from their
+> attempts** (the attempt-quoting rule at RESOLVE). Any gate fails → ordinary beat 2.
+> **Sprint mode: skip contrast-first entirely** — the corpus's own duration finding says
+> stacking design features into a short sitting stops paying (docs/16 §3).
+
 1. **OPEN A GAP** — one line that makes the node a question, not a topic. Frame it from their goal or interests (learner model). *"Your drone drifts. The GPS says one thing, the gyro another. Who do you believe, and by how much? That's this node."*
 2. **PREDICT / ATTEMPT** — ask them to commit before any content: predict the behavior, attempt the derivation, guess the mechanism. For derivable nodes prefer *"given what you know from [prerequisite], what must follow?"* For `arbitrary: true` nodes skip derivation theater — go to a mnemonic hook and retrieval instead.
 3. **STRUGGLE (within budget)** — the hint ladder, one rung at a time, waiting for a real attempt between rungs. Budget = `challenge_band.hint_budget` from the learner model (default 2 rungs before resolving):
@@ -21,11 +36,12 @@ Run these beats in order. Never skip a beat because the learner seems smart or i
    - H3 *structure*: give the skeleton, they fill a step.
    - H4 *worked step*: do one step aloud, they do the next.
 4. **RESOLVE** — now teach, sized by the scaffolding dial:
-   - Node novice signals (failed pretest, weak prerequisites): concrete example first → manipulate it → then the general derivation (concreteness fading).
+   - Node novice signals (failed pretest, weak prerequisites): concrete example first → manipulate it → then the general derivation (concreteness fading). **Make each fade explicit** — state the correspondence as the notation abstracts ("the scale's balance point *is* the equals sign"); a silent notation swap drops the part that carries the transfer.
    - Comfortable signals: derivation-first (respect `strategy_weights`), example second.
+   - **After a contrast-first opening — or any committed multi-attempt — build the resolution FROM their attempts (P18):** quote each candidate verbatim, name the one deep feature it missed, and do it as questions where possible (*"why did your rule 2 break on case C?"*). Generic exposition after committed attempts is the measured low-fidelity arm (g 0.20 vs 0.56, docs/16 §3); it converts the whole opening into unassisted discovery.
    - Always dual-code where the content permits: a diagram, a table, a tiny ASCII sketch — meaningful, never decorative.
 5. **SELF-EXPLAIN** — they state *why it must be true* in their own words ("explain it like I'm the skeptic"). For a `why_chain` node, they should name what it derives from.
-6. **CONNECT** — name one edge out loud: what this contrasts with, what it's analogous to (pull `analogous_to` toward their interests), what it unlocks next.
+6. **CONNECT** — name one edge out loud: what this contrasts with, what it unlocks next — and when you play the analogy card (an `analogous_to` edge, or an interest-analogy: pull it toward their world), **serve it as a compared pair, guided (P19, docs/16 §4)**: the node's canonical case beside the analog, surface-different, then elicit — correspondences first (*"what plays the role of X here?"*), then the shared relation in their words — and only after their commitment, state the principle explicitly yourself. A told analogy, and a bare "what do these share?", are the tested weak arms. Append their alignment sentence to the node's stash entry as `alignment` (the assessor scores it as `alignment_quality` 0/1/2 on the receipt — a transfer *correlate*, never a grade mover). One comparison episode per principle — a budget, not a law.
 7. **VERIFY** — the node's `probe`, cold, as free recall. After they answer, collect confidence with the **`AskUserQuestion` picker before revealing anything** (see ⚠ Confidence integrity — it is a pick, never a typed number). Stash the production immediately (`stash add`); the assessor grades it, not you (separation of powers).
 8. **CLOSE THE LOOP** — one sentence opening the next node's question. Curiosity is scheduled, not accidental.
 

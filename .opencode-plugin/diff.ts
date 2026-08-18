@@ -105,6 +105,12 @@ export function writeUpdateDiff(
   target: string,
   categories: Record<string, { added: string[]; skipped: string[] }> | undefined,
   to: string,
+  // Applied to the SOURCE side before diffing. The extracted agents are
+  // transformed copies (mode: subagent, tools map), so diffing the raw
+  // package source against them rendered the extraction transform backwards
+  // — "the new version removes mode: subagent" — on every agent change.
+  // The caller passes the same transform diffCategory compares through.
+  transformSrc: (file: string, content: string) => string = (_f, c) => c,
 ): number {
   if (!categories) return 0
 
@@ -117,7 +123,7 @@ export function writeUpdateDiff(
       const destPath = resolve(target, file)
       if (!existsSync(srcPath) || !existsSync(destPath)) continue
       try {
-        const a = readFileSync(srcPath, "utf-8")
+        const a = transformSrc(file, readFileSync(srcPath, "utf-8"))
         const b = readFileSync(destPath, "utf-8")
         const diff = diffLines(b, a)
         if (diff) {

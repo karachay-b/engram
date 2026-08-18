@@ -686,35 +686,63 @@ Both v1.0.8 regressions were found by exactly those three questions and by nothi
 selftest, fuzz, dogfood, or live run on the ported platform can see them, because the damage is
 to the five platforms you were not testing.
 
-## 5.6 · THE USER SESSION ⚠ NEW — the "user ready" gate
+## 5.6 · THE USER SESSION ⚠ AGENT-RUN since v1.14.0 — the "user ready" gate
 
 Everything above proves the system is *correct*. **Nothing above proves it is usable.** This
 step is the only one that asks the question the 500 people who installed it actually care about:
 *would a stranger get through this?*
 
-**Be a learner. Not a tester. Actually try to learn something you don't know.**
+**Since v1.14.0 this gate is run by the release agent, not the founder.** The structure that
+keeps it honest is the SEPARATION: the release agent plays the tutor, following the
+release-tree skills verbatim, against a **learner persona agent in its own fresh context** —
+so the tutor cannot script the answers it will receive, which is the same isolation that keeps
+the assessor blind. A single context playing both sides is a rehearsal, not a test.
 
 ```bash
-export ENGRAM_HOME=$(mktemp -d)     # throwaway, always
+export ENGRAM_HOME=$(mktemp -d)     # throwaway, always — a dogfood receipt in the real
+                                    # store poisons a real schedule
 ```
 
-Rules, and they are what make it worth doing:
+Rules, adapted from the human form and equally binding:
 
-- **Pick a topic you genuinely do not understand.** Not a demo topic. Not something you can fake.
-  If you already know it, you cannot feel where the tutor is confusing.
-- **Answer honestly.** Do not perform competence. Give the terse, half-right answer you would
-  actually give at 11pm. That is the production the assessor has to handle, and the one that
-  found the *terse-production* rule in the first place.
-- **Do not fix anything while you are inside the session.** Write it down and keep going. The
-  moment you start debugging, you have stopped being a user.
-- **Then time-travel the sandbox and run `/review`.** The retention half is the half that has
-  never run — you do not get to ship a release that touches it without running it.
+- **Pin the persona's knowledge state before the session starts**: at least two *confident
+  misbeliefs* (asserted with a high band when probed) and several *genuine blanks* — because
+  the hypercorrection path, the misconception log, and the assessor's skeptic rules are the
+  machinery under test, and a competent learner exercises none of them.
+- **The persona answers terse and honest — 11pm answers.** It never performs competence, never
+  breaks character, and learns imperfectly (gist in its own words, one detail dropped).
+- **Drive the release tree, not the installed plugin** (§5.5's version trap applies doubly):
+  hand agents the repo's `agents/<name>.md` by absolute path, and print the installed-vs-
+  shipping versions before trusting anything.
+- **Do not fix anything while inside the session.** Write it down and keep going. The moment
+  the tutor starts debugging, it has stopped being a tutor.
+- **Then time-travel the sandbox and run the `/review` half.** The retention loop is the half
+  that never runs otherwise — including the ambient hook's return surface, the growth line,
+  and the criterion loop on a lapse.
+- **Cross-check every number shown to the learner against the state afterward** (§4.8.1 by
+  hand): run the sibling commands side by side and put their reads next to each other.
 
-### The report (paste it into the PR / release notes — it is required output)
+### The report (required output; file it in `docs/user-sessions/vX.Y.Z-*.md`)
+
+Same template as always — plus one mandatory addition at the top: a **PROVENANCE** block
+naming the learner as a persona agent and stating plainly what a simulation certifies (the
+flow, the prose, the numbers, the blind-grading chain under the shipped specs) and what it
+cannot (the felt experience of a real human across real days — `ENGRAM_TODAY` cannot fake the
+feel of returning). **The verdict is still binding.** A release the agent would not hand to a
+stranger does not ship, no matter how green the other gates are.
+
+**And the standing honest note transfers, strengthened:** because no simulated learner can
+feel the retention loop, real-world signal — issue reports, the founder's own use between
+releases, contributed receipts — is the only thing that ever validates that half. When such
+signal contradicts a shipped agent-run verdict, the contradiction outranks the verdict, and
+the next release says so in this file's style: on the record, with the original error kept.
+
+The template:
 
 ```
 ## User session report — vX.Y.Z
-topic: <what you tried to learn>      mode: <sprint|standard|deep>
+PROVENANCE: <who played the learner; what this certifies and what it cannot>
+topic: <what the learner tried to learn>      mode: <sprint|standard|deep>
 real minutes: <n>                     nodes encoded: <n>      reviews cleared: <n>
 
 WHAT WORKED
@@ -735,15 +763,9 @@ WOULD A STRANGER GET THROUGH THIS?   yes / no — and why
 VERDICT:   ship / do not ship
 ```
 
-**The verdict is binding.** If you would not hand this to a stranger, it does not ship, no matter
-how green the tests are. The whole point of the project is a tool a human keeps using; a release
-that is correct and unusable has failed at the only thing that matters.
-
-**And the honest note:** the *feel* of returning after three days cannot be faked with
-`ENGRAM_TODAY`. When a release changes the retention loop, the amnesty protocol, or the ambient
-surface, **use it for real, across real days, before the next release.** The founder's own
-account — 7 encoded, 0 reviewed — is what this entire release existed to fix, and no sandbox
-would ever have shown it.
+(The founder's own account — 7 encoded, 0 reviewed — is what the v0.6 line of releases
+existed to fix, and no sandbox would ever have shown it. That is why the real-world-signal
+clause above is part of the gate and not a footnote.)
 
 ---
 

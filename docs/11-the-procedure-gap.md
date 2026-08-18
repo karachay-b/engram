@@ -137,9 +137,11 @@ and once instruction has happened, the practice act is solving, not re-studying.
   Atkinson & Große 2004) — fade the principle-bearing step, not the arithmetic.
 - **The ladder must retract, asymmetrically:** expertise reversal is confirmed and
   disordinal — assistance helps novices **d = +0.505** and harms knowledgeable learners
-  **d = −0.428** (Tetzlaff et al. 2025, 176 effects, N = 5,924; *strongest in higher
-  education*), with the meta-analysts' own asymmetry note adopted as the default: when
-  unsure, provide assistance.
+  **d = −0.428** (Tetzlaff, Simonsmeier, Peters & Brod 2025, 176 effects, N = 5,924;
+  the higher-education elevation holds on the *novice-benefit* side only — 0.99, p = .003;
+  the expert-harm side is −0.09, p = .749, and the moderator is partially confounded with
+  age — corrected by the docs/16 gauntlet), with the meta-analysts' own asymmetry note
+  adopted as the default: when unsure, provide assistance.
 - **Attempt-first survives, in its lane:** PS-I beats instruction-first for conceptual
   understanding and transfer at **g = 0.36 [0.20, 0.51]** with **no detected procedural
   cost (g = −0.03, n.s. — the CI admits a small cost; say it this way)** (Sinha & Kapur
@@ -203,13 +205,20 @@ arithmetic, and priced gently when the only error is a slip.
   (Samani & Pan 2021). The mechanism carries the design: blocked practice tells you the
   strategy; test errors under blocking are overwhelmingly wrong-*formula-selection* —
   learners knew *how*, not *which*.
-- **The juxtaposition condition (verified moderator, adopted as a rule):** the interleaving
-  effect concentrates under **immediate succession** (g = 0.73) and collapses when the
-  contrasted items are temporally spread (g = 0.22, n.s.) (Brunmair & Richter 2019) — and
-  it pays only between *confusable* types (words: negative). So discrimination is a
-  **within-session** lever (serve confusable siblings adjacently, ask "which technique, and
-  why?") and spacing a **between-session** lever; a scheduler that scatters single problems
-  across days implements neither.
+- **The juxtaposition condition (moderator adopted as a rule, with its weight stated —
+  corrected by the docs/16 gauntlet):** the interleaving effect concentrates under
+  **immediate succession** (g = 0.73 [0.51, 0.95]), survives with **distractors
+  interposed** (g = 0.51 [0.07, 0.96]), and is n.s. when items are **temporally spaced**
+  (g = 0.22 [−0.13, 0.45]) (Brunmair & Richter 2019). Quote it at its real weight:
+  **k = 17, four studies in the non-adjacent cells**, a subgroup the authors held out of
+  the main meta-regression ("to minimize noise"), and "spaced" here means **10–30
+  seconds** against **under 2 seconds** — it measures presentation lag, not scheduling;
+  the cell a dialogue-embedded drill resembles is the distractor one (0.51). It pays only
+  between *confusable* types (words: negative). So discrimination is a **within-session**
+  lever (serve confusable siblings adjacently, ask "which technique, and why?") and
+  spacing a **between-session** lever; a scheduler that scatters single problems across
+  days implements neither — an a-fortiori inference from a seconds-scale finding, which
+  is the honest grounding for the rule.
 - **Spaced problem-solving in real adult STEM coursework:** the Lyle–Ralston program
   (Hopkins et al. 2016; Lyle et al. 2020; Lyle et al. 2022, N = 180 calculus, preregistered
   within-Ss): spacing retrieval of course objectives — the retrieval events being genuine

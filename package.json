@@ -1,7 +1,7 @@
 {
   "name": "opencode-engram-learning",
-  "version": "1.11.1",
-  "description": "Evidence-based learning engine for OpenCode \u2014 learn anything, verify by free recall, schedule with FSRS, adapt from your own data.",
+  "version": "1.14.0",
+  "description": "Evidence-based learning engine for OpenCode — learn anything, verify by free recall, schedule with FSRS, adapt from your own data.",
   "type": "module",
   "license": "MIT",
   "peerDependencies": {
@@ -16,9 +16,11 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "main": "./.opencode-plugin/index.ts",
+  "main": "./.opencode-plugin/entry.ts",
   "exports": {
-    ".": "./.opencode-plugin/index.ts"
+    ".": "./.opencode-plugin/entry.ts",
+    "./server": "./.opencode-plugin/entry.ts",
+    "./v2": "./.opencode-plugin/v2.ts"
   },
   "keywords": [
     "opencode",
@@ -26,15 +28,22 @@
     "learning",
     "fsrs",
     "spaced-repetition",
-    "pi-package"
+    "pi-package",
+    "dsh-plugin"
   ],
   "engines": {
-    "opencode": ">=1.0.0"
+    "opencode": ">=1.0.0 || >=0.0.0-0"
   },
   "pi": {
-    "extensions": ["./pi/engram.ts"],
-    "skills": ["./skills"],
-    "prompts": ["./pi/prompts"]
+    "extensions": [
+      "./pi/engram.ts"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./pi/prompts"
+    ]
   },
   "files": [
     ".opencode-plugin",
@@ -50,7 +59,10 @@
     "INSTALL-PI.md",
     "INSTALL-CODEX.md",
     "INSTALL-HERMES.md",
-    "INSTALL-OPENCLAW.md"
+    "INSTALL-OPENCLAW.md",
+    "INSTALL-OPENCODE-V2.md",
+    "dsh",
+    "INSTALL-DSH.md"
   ],
   "repository": {
     "type": "git",

@@ -5,7 +5,8 @@
  * Copies plugin files from the npm package cache into OpenCode's config directory.
  * copyMissing() never overwrites existing files — preserves user edits across updates.
  *
- * Extraction (DIRS): skills/, agents/, scripts/ (new files only, never overwrite)
+ * Extraction (DIRS): skills/, agents/, scripts/, gold/, experiments/, docs/
+ * (new files only, never overwrite)
  * Generated (versioned marker block): AGENTS.md (project root or global)
  * Generated (always overwritten): command/, .engram-version.jsonc
  *
@@ -14,15 +15,27 @@
  * On fresh install, no manifest — bridge registers agents/commands/skills in config hook.
  */
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, copyFileSync, unlinkSync, rmdirSync } from "node:fs"
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, copyFileSync, unlinkSync, rmdirSync, lstatSync, renameSync } from "node:fs"
 import { resolve, basename } from "node:path"
 import { execSync } from "node:child_process"
 import { parseFrontmatter } from "./parse-frontmatter.js"
-import { writeUpdateManifest } from "./update.js"
+import { writeUpdateManifest, MANIFEST_CATEGORIES, SHALLOW_CATEGORIES } from "./update.js"
 import { warnClaudeMdCollision } from "./claude-warning.js"
 
-/** Directory categories copied by selfExtract. docs/ deliberately excluded. */
-const DIRS = ["skills", "agents", "scripts"]
+/** Directory categories copied by selfExtract (new files only, never overwrite).
+ *  gold/ and experiments/ are engine dependencies, not learner data: engram.py
+ *  resolves both from its own location (_plugin_root()), so an extracted engine
+ *  without them fails 10 selftest checks — the gold-audit family and the
+ *  experiment-preset check (issue #20). The learner's own gold/local-gold.jsonl
+ *  lives in the state dir and is never touched by extraction. docs/ is cited by
+ *  the extracted skills (docs/05-affective-layers.md etc.) and promised by the
+ *  AGENTS.md block ("resolve to the extracted copy"), so it ships too —
+ *  top-level files only (SHALLOW_CATEGORIES): the internal subdirectories are
+ *  process records no skill cites.
+ *  DERIVED from the manifest category list so auto update can never delete a
+ *  manifested file this loop does not know how to restore ("commands" is the
+ *  one category regenerated elsewhere — generateCommands). */
+const DIRS = MANIFEST_CATEGORIES.filter(d => d !== "commands")
 
 const INSTRUCTIONS_TEXT = `# Engram — Evidence-Based Learning Engine
 
@@ -329,15 +342,19 @@ export function needsExtract(target: string, version: string): boolean {
   return prev !== version
 }
 
-/** Recursively copies new files from src to dest. Never overwrites existing files (existsSync guard). No-ops silently if src absent. */
-export function copyMissing(src: string, dest: string) {
+/** Recursively copies new files from src to dest. Never overwrites existing
+ *  files (existsSync guard). No-ops silently if src absent. shallow=true
+ *  copies top-level files only (SHALLOW_CATEGORIES — must stay in step with
+ *  walkFiles in update.ts, or the manifest lists files extraction never
+ *  places). */
+export function copyMissing(src: string, dest: string, shallow = false) {
   if (!existsSync(src)) return
   mkdirSync(dest, { recursive: true })
   for (const entry of readdirSync(src, { withFileTypes: true })) {
     const srcPath = resolve(src, entry.name)
     const destPath = resolve(dest, entry.name)
     if (entry.isDirectory()) {
-      copyMissing(srcPath, destPath)
+      if (!shallow) copyMissing(srcPath, destPath)
     } else if (!existsSync(destPath)) {
       copyFileSync(srcPath, destPath)
     }
@@ -369,6 +386,11 @@ function toYAML(obj: Record<string, any>): string {
 /** Transforms a Claude Code agent markdown to OpenCode YAML format (mode: subagent, hidden: true, tools string → object). */
 function transformAgentForOpenCode(content: string): string {
   const { attrs, body } = parseFrontmatter(content)
+  // Already transformed → return unchanged. Re-transforming strips the
+  // nested tools: map (the line parser reads it as empty), silently lifting
+  // every tool restriction from the extracted subagents on the SECOND
+  // version bump — shipped behavior until v1.12.0, caught by review.
+  if (attrs.mode === "subagent") return content
   const newAttrs: Record<string, any> = {}
   if (attrs.name) newAttrs.name = attrs.name
   if (attrs.description) newAttrs.description = attrs.description
@@ -385,7 +407,7 @@ function transformAgentForOpenCode(content: string): string {
   return `---\n${toYAML(newAttrs)}\n---\n\n${body.trimEnd()}\n`
 }
 
-const COMMANDS_DEF: Record<string, { description: string; template: string }> = {
+export const COMMANDS_DEF: Record<string, { description: string; template: string }> = {
   learn: {
     description:
       "Learn any topic properly — first-principles curriculum, generation-first tutoring, verified free recall, FSRS scheduling",
@@ -438,7 +460,7 @@ function generateCommands(target: string, log: (msg: string) => void) {
  * Main extraction entry point. Idempotent via .engram-version.jsonc guard.
  *
  * 1. Version check → skip if same
- * 2. copyMissing skills/, agents/, scripts/ (new files only)
+ * 2. copyMissing every DIRS category (new files only; docs/ top-level only)
  * 3. Transform agents to OpenCode YAML (mode: subagent, hidden: true)
  * 4. Generate AGENTS.md (versioned marker block), command/ (always overwritten)
  * 5. Write .engram-version.jsonc with version + previous
@@ -459,7 +481,7 @@ export function selfExtract(packageRoot: string, directory: string, version: str
     for (const dir of DIRS) {
       const srcDir = resolve(packageRoot, dir)
       const destDir = resolve(target, dir)
-      copyMissing(srcDir, destDir)
+      copyMissing(srcDir, destDir, SHALLOW_CATEGORIES.has(dir))
       if (existsSync(srcDir)) {
         log(`Engram: merged ${dir} to ${destDir}`)
       }
@@ -470,6 +492,12 @@ export function selfExtract(packageRoot: string, directory: string, version: str
       for (const file of readdirSync(agentsDestDir)) {
         if (!file.endsWith(".md")) continue
         const filePath = resolve(agentsDestDir, file)
+        // writeFileSync follows symlinks. A symlinked agent (a contributor
+        // checkout linking a target's agents/*.md to the canonical agents/
+        // tree) is by definition not an extracted copy, so it is never ours
+        // to transform — writing through the link would rewrite the files
+        // every other platform ships.
+        try { if (lstatSync(filePath).isSymbolicLink()) continue } catch { continue }
         const original = readFileSync(filePath, "utf-8")
         const transformed = transformAgentForOpenCode(original)
         writeFileSync(filePath, transformed)
@@ -489,12 +517,16 @@ export function selfExtract(packageRoot: string, directory: string, version: str
     generateCommands(target, log)
 
     const versionFile = resolve(target, ".engram-version.jsonc")
-    writeFileSync(versionFile, JSON.stringify({
+    // Atomic: a torn version file silently downgrades the next start to a
+    // fresh install — no update manifest, stale user edits never flagged.
+    const versionTmp = versionFile + ".tmp"
+    writeFileSync(versionTmp, JSON.stringify({
       version,
       previous: prevVersion || undefined,
       installed_at: new Date().toISOString(),
       source: "npm",
     }, null, 2))
+    renameSync(versionTmp, versionFile)
 
     if (prevVersion) {
       writeUpdateManifest(packageRoot, target, prevVersion, version)

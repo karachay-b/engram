@@ -51,10 +51,23 @@ def build(r, home):
                     "probe_gap":rnd(r)})+"\n")
     with open(os.path.join(home,"sessions.jsonl"),"w") as f:
         f.write(json.dumps({"ts":rnd(r),"kind":rnd(r)})+"\n")
+    # v1.11.2 (issue #17): the stash is a read path in its own right (`stash list`/`count` are
+    # read-only sub-actions of a MUTATING command, which is the amendment §4.7 had to add after
+    # `experiment status` went 600 states unfuzzed), and `make_receipt` now reads it too. A gate
+    # that never writes the file cannot report on the code that reads it.
+    with open(os.path.join(home,"pending-verify.jsonl"),"w") as f:
+        for i in range(r.randint(0,3)):
+            f.write(json.dumps({"sid":rnd(r),"topic":rnd(r),"node":rnd(r),"probe":rnd(r),
+                                "production":rnd(r),"confidence":rnd(r),
+                                "production_truncated":rnd(r),"ts":rnd(r)})+"\n")
+        f.write(json.dumps(rnd(r))+"\n")        # a non-object line: pure corruption, valid JSON
 
 import engram as E
 READS = ["stats","adherence","retention","decay","topics","due","next","topic-status",
-         "gold","grader-health","session-start","report","doctor","transfer","path"]
+         "gold","grader-health","session-start","report","doctor","transfer","path",
+         # v1.11.2: the stash's own read sub-actions. `stash list` is the blind assessor's
+         # ENTIRE input, so a brick here is a settle that cannot happen at all.
+         "stash-list","stash-count"]
 crashes = 0; runs = 0
 for seed in (11, 22, 33):
     r = random.Random(seed)
@@ -68,9 +81,12 @@ for seed in (11, 22, 33):
                   "decay":E.cmd_decay,"topics":E.cmd_topics,"due":E.cmd_due,"next":E.cmd_next,
                   "topic-status":E.cmd_topic_status,"gold":E.cmd_gold,"grader-health":E.cmd_grader_health,
                   "session-start":E.cmd_session_start,"report":E.cmd_report,"doctor":E.cmd_doctor,
-                  "transfer":E.cmd_transfer,"path":E.cmd_path}[name]
+                  "transfer":E.cmd_transfer,"path":E.cmd_path,
+                  "stash-list":E.cmd_stash,"stash-count":E.cmd_stash}[name]
             for args in ([E._ns(topic="t1"), E._ns(), E._ns(cap=3), E._ns(order="savings"),
                           E._ns(cap=2, topic="t1")] if name == "due" else
+                         [E._ns(action="list")] if name == "stash-list" else
+                         [E._ns(action="count")] if name == "stash-count" else
                          [E._ns(topic="t1"), E._ns()]):
                 runs += 1
                 try:

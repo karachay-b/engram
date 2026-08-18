@@ -33,13 +33,21 @@ SCHEMA = 1
 # The one place the engine knows its own version. Read by `export`, so a shared receipt states
 # which engine produced it — a corpus of receipts from unknown engine versions is not a corpus.
 # Pinned against .claude-plugin/plugin.json by a selftest, so it cannot drift.
-ENGRAM_VERSION = "1.11.1"
+ENGRAM_VERSION = "1.14.0"
 RETENTION_DEFAULT = 0.90
 INTERVAL_MAX = 365
 RETENTION_MIN, RETENTION_MAX = 0.70, 0.97   # sane desired-retention bounds
 MULTIPLIER_MIN, MULTIPLIER_MAX = 0.5, 1.5   # matches refit clamp
 CAL_MIN_N = 10          # calibration verdict floor: below this, "insufficient-data"
-PRODUCTION_MAX = 800    # receipt production cap (chars)
+# Production ceiling (chars). `stash list` IS the blind assessor's entire input, so this is not a
+# storage bound — it is a bound on WHAT THE GRADER IS ALLOWED TO KNOW. At 800 it sat inside the
+# range of an ordinary long free recall: a real production arrived cut mid-sentence, two rubric
+# criteria fell in the missing tail, the assessor correctly could not verify what it could not
+# see, and the grade had to be corrected by a manual appeal (issue #17). 2400 clears a thorough
+# recall (~400 words) while keeping the assessor prompt cheap; past it the clip is a runaway-paste
+# guard, and when it fires it MUST stay marked — a grade computed from a partial answer is
+# precisely the flattering-direction wrong number this engine cannot afford to invent.
+PRODUCTION_MAX = 2400
 
 # FSRS-4.5 default parameters (open-spaced-repetition). w[0..3] are initial
 # stabilities for Again/Hard/Good/Easy; the rest shape difficulty and growth.
@@ -981,6 +989,28 @@ def cmd_add_topic(args):
             warnings.append("%s: %s%s" % (nid,
                             ("rubric criterion %d " % gap["criterion"]) if gap["criterion"] else "",
                             gap["note"]))
+        # `interactivity` + `contrast` (v1.14, docs/16): validated like `viz` — warn-and-
+        # drop, never fatal — but ONLY on nodes this payload authored and still listed
+        # (same guard, same reason as the probe/rubric scan above: `--extend` merges every
+        # pre-existing node into g["nodes"], and an unguarded check would warn about — and
+        # here MUTATE — nodes the author never touched, while `doctor` calls them clean).
+        # `cases` must be a real list: a scalar reached len() and took the whole add down
+        # with a TypeError, and a string passed the >=2 gate as characters — both found by
+        # the v1.14 pre-release review.
+        if _authored and _still_listed:
+            if node.get("interactivity") is not None and node.get("interactivity") not in (
+                    "high", "normal"):
+                warnings.append("%s: unknown interactivity %r dropped (use high|normal)"
+                                % (nid, node.get("interactivity")))
+                node.pop("interactivity", None)
+            if node.get("contrast") is not None and not isinstance(node.get("contrast"), dict):
+                warnings.append("%s: contrast block is not an object — dropped" % nid)
+                node["contrast"] = None
+            if (isinstance(node.get("contrast"), dict)
+                    and not (isinstance(node["contrast"].get("cases"), list)
+                             and len(node["contrast"]["cases"]) >= 2)):
+                warnings.append("%s: contrast block needs a list of >=2 cases — dropped" % nid)
+                node["contrast"] = None
         # The engine OWNS scheduling state — never trust payload-supplied state/fsrs
         # (mastery advances only through receipts; Article 10). On --replace, carry
         # the existing schedule forward for surviving node ids so restructuring a
@@ -1029,7 +1059,13 @@ def cmd_add_topic(args):
             if not isinstance(targets, list):
                 continue
             for t in targets:
-                if t not in g["nodes"]:
+                if t == nid:
+                    # a self-edge passed silently (its own id IS in g["nodes"]) and a
+                    # self-contrast then served the node its own claim as a "sibling"
+                    # right before free recall (v1.14 pre-release review)
+                    warnings.append("%s.%s -> itself (self-edge; serving surfaces skip it)"
+                                    % (nid, etype))
+                elif t not in g["nodes"]:
                     warnings.append("%s.%s -> unknown node '%s'" % (nid, etype, t))
     cyc = _requires_cycle(g)
     if cyc:
@@ -1480,6 +1516,23 @@ def due_items(topic_filter=None, limit=None, horizon_days=0, order="overdue"):
                     "node_kind": node_kind_of(node),
                     "practice": (node.get("practice")
                                  if isinstance(node.get("practice"), dict) else None),
+                    # v1.14 (docs/16 §5, the P17 concept clause): the confusable siblings
+                    # ride the due payload — id + claim only — so /review can serve the
+                    # discrimination pair adjacently without a second engine call. Dropped,
+                    # never served: unknown ids, retired siblings, the node ITSELF (a
+                    # self-contrast would hand the learner their own answer), and any
+                    # sibling still `new` — an unencoded sibling's claim is pre-exposure,
+                    # and the drill discriminates between things the learner has MET. The
+                    # skill owns the remaining exemptions (arbitrary nodes, quick mode).
+                    "contrasts_with": [
+                        {"id": c, "claim": g["nodes"][c].get("claim")}
+                        for c in (((node.get("edges") or {}).get("contrasts_with") or [])
+                                  if isinstance(node.get("edges"), dict) else [])
+                        if isinstance(c, str) and c != nid
+                        and isinstance((g.get("nodes") or {}).get(c), dict)
+                        and g["nodes"][c].get("state") != "new"
+                        and not is_retired(g["nodes"][c])
+                    ],
                 })
                 if fsrs.get("dose") is True and as_number(fsrs.get("reps"), 0) <= DOSE_REPS:
                     # inv. 14: a model-derived policy must carry its label where a skill
@@ -1563,17 +1616,79 @@ def clean_confidence(conf):
         return None
     return int(round(clamp(v, 0.0, 100.0)))
 
+def _stashed_item(sid):
+    """The engine's own record of a settle, recovered from the stash by transaction id.
+
+    `apply_item` mints the receipt BEFORE it drops the stash entry, so everything the blind
+    assessor was actually handed is still on disk at this point. Returns the entry, or None —
+    which is the honest answer on the sid-less `rate` path and on a stash cleared out of order.
+    """
+    if not (isinstance(sid, str) and sid):
+        return None
+    for e in read_jsonl(p(STASH_FILE)):
+        if e.get("sid") == sid:
+            return e
+    return None
+
 def make_receipt(item, extra, kind):
-    prod = item.get("production") or ""
-    truncated = len(prod) > PRODUCTION_MAX
+    # STRING OR NOTHING, at the gate. `production` arrives from an agent's JSON and — since
+    # v1.11.2 — from a hand-editable stash file, and a state file can be valid JSON with the
+    # wrong types (§4.7's whole premise). A non-string here reached `len(prod)` and took the
+    # settle down with a TypeError: not a degraded read, a torn write on an append-only log.
+    prod = item.get("production")
+    prod = prod if isinstance(prod, str) else ""
+    # ⚠ THE ARCHIVE COMES FROM THE STASH, NOT FROM THE GRADER'S ECHO (v1.11.2, issue #17).
+    #
+    # The receipt's `production` used to be whatever the assessor typed back, bounded by a
+    # "trimmed <= 600 chars" line in its own agent spec. Two things followed, and both were real:
+    # the permanent record of a graded production was a MODEL'S TRANSCRIPTION of the learner's
+    # words rather than the words, so an appeal had no full text on disk to re-judge against;
+    # and `production_truncated` was RECOMPUTED here, so an upstream clip — which lands at
+    # exactly PRODUCTION_MAX — read as `len(prod) > PRODUCTION_MAX == False` and the receipt
+    # claimed a complete production. That is how the issue-#17 clip reached the archive unmarked.
+    #
+    # The stash entry IS what the blind assessor was handed, and it is still on disk here. So the
+    # engine takes the text and the flag from ITS OWN record and only falls back to the item when
+    # there is no matching entry. A truncation flag is now CARRIED, never recomputed away — by
+    # code, not by an instruction an agent has to remember. Same discipline as `sid`: the fields
+    # the engine's integrity rests on are not routed through a model.
+    #
+    # ⚠ AND THE SIBLING, which is the worse half (found by §4.5's grep-for-siblings rule).
+    # `confidence` is on the same footing: the learner PICKS it, pre-feedback, and the engine
+    # records it at stash time — but the receipt took the assessor's echo of it. An assessor that
+    # simply omitted the field (it is one line in a strict schema) wrote `confidence: null`, and
+    # `_calibration` drops a null-confidence row from its population WITHOUT SAYING SO. The row
+    # most likely to go missing is the high-confidence LAPSE — which the assessor's own spec calls
+    # "precisely the case most valuable to catch" — and deleting exactly that row makes Brier and
+    # `overconfident_lapses` look BETTER. A flattering number, produced by silence. Both classes
+    # this repo cannot ship, in one field.
+    #
+    # So a matched stash entry is authoritative for what the LEARNER produced and picked, and for
+    # the probe actually served. It is NOT authoritative for the grade — `grade`, `rating`,
+    # `misconceptions`, `rubric_notes`, `error_class` and `probe_gap` are the assessor's judgment
+    # and must keep coming from the assessor. The engine owns the facts; the grader owns the verdict.
+    stashed = _stashed_item(item.get("sid")) or {}
+    if isinstance(stashed.get("production"), str) and stashed["production"]:
+        prod = stashed["production"]
+    truncated = (len(prod) > PRODUCTION_MAX or bool(stashed.get("production_truncated"))
+                 or bool(item.get("production_truncated")))
+    # A MATCHED STASH ENTRY IS AUTHORITATIVE FOR CONFIDENCE — present, null, or absent alike.
+    # Not `"confidence" in stashed`, which looks equivalent and is not: `stash add` does not
+    # require the field, so an entry can legitimately carry no confidence at all, and falling
+    # back to the item there re-opens the exact hole this closes. The assessor sees nothing but
+    # the stash, so a confidence it supplies for an entry that has none is invented BY
+    # DEFINITION — "never invent a confidence" stops being an instruction and becomes arithmetic.
+    # A stashed null (learner declined) and a stashed 0 (a real pick, and falsy) both survive.
+    conf_src = stashed if stashed else item
+    probe_src = stashed if stashed.get("probe") else item
     receipt = {
         "id": gen_id("r"),
         "ts": today().isoformat(),
         "topic": item["topic"], "node": item["node"],
         "kind": kind,
-        "probe": item.get("probe"),
+        "probe": probe_src.get("probe"),
         "production": (prod[:PRODUCTION_MAX] or None),
-        "confidence": clean_confidence(item.get("confidence")),
+        "confidence": clean_confidence(conf_src.get("confidence")),
         "grade": item.get("grade"),
         "rating": item["rating"],
         "misconceptions": item.get("misconceptions", []),
@@ -1594,6 +1709,14 @@ def make_receipt(item, extra, kind):
     ec = item.get("error_class")
     if ec in ERROR_CLASSES:
         receipt["error_class"] = ec
+    # The analogy-alignment score (v1.14, docs/16 P19): the assessor's 0/1/2 rating of the
+    # learner's stated commonality between two compared cases. A transfer CORRELATE being
+    # recorded — never a grade input, never inferred. Validated to the literal scale;
+    # absent stays honestly absent (bool guard: True == 1 in Python, and a grader emitting
+    # `true` must not become a real-looking 1).
+    aq = item.get("alignment_quality")
+    if aq in (0, 1, 2) and not isinstance(aq, bool):
+        receipt["alignment_quality"] = aq
     # Which grader produced this verdict (v0.7, docs/09 §3.3). Recorded when the assessor
     # states it, NEVER invented: a model guessing its own model-id is exactly the fabricated
     # data this repo bans, and v1.0's export must be able to carry each receipt's grader so
@@ -2049,7 +2172,11 @@ def cmd_stash(args):
             # `receipt --file` idempotent and closes the crash-retry window (issue #3).
             item.setdefault("sid", gen_id("s"))
             prod = item.get("production") or ""
-            if len(prod) > PRODUCTION_MAX:   # bound stash growth (matches receipt cap)
+            # RUNAWAY-PASTE GUARD ONLY — it is not a storage bound. Whatever survives this line
+            # is the entire input the blind assessor gets to grade, so it must never fire on a
+            # production a learner actually wrote (issue #17: at 800 it did, mid-sentence, and
+            # the two rubric criteria in the missing tail were graded as unmet).
+            if len(prod) > PRODUCTION_MAX:
                 item["production"] = prod[:PRODUCTION_MAX]
                 item["production_truncated"] = True
             append_jsonl(path, item)
@@ -2383,6 +2510,11 @@ def _exp_metric_floor(exp):
     reader then took `max(..., EXPERIMENT_MIN_PER_ARM)`, so 8 and 10 could never bind and one
     key published two numbers for one experiment (bug class #7)."""
     m = exp.get("metric") if isinstance(exp, dict) else None
+    # a hand-edited experiments.json can hold a dict/list metric — unhashable, and
+    # .get() raised straight through `experiment status`, a READ path (§4.7, found by
+    # the v1.14 re-fuzz). Non-string metrics take the default floor and degrade.
+    if not isinstance(m, str):
+        return EXPERIMENT_MIN_PER_ARM
     return EXPERIMENT_METRIC_MIN.get(m, EXPERIMENT_MIN_PER_ARM)
 
 def _exp_min_per_arm(exp):
@@ -2581,12 +2713,20 @@ def cmd_experiment(args):
             "started": today().isoformat(), "status": "active",
             "assignments": [], "verdict": None,
         })
-        if exp["min_per_arm"] < EXPERIMENT_MIN_PER_ARM:
+        # The note compares against the METRIC-AWARE floor — the same one settle/status
+        # enforce (max of min_per_arm and _exp_metric_floor). Comparing against the bare
+        # 15 told a transfer_fired experiment (floor 8) that its settle "will read
+        # underpowered", and the settle then issued a real verdict at 8 — the
+        # pre-registration record contradicting the analysis is bug class #7 wearing a
+        # power label (v1.14 pre-release review).
+        _floor = _exp_metric_floor(exp)
+        if exp["min_per_arm"] < _floor:
             exp["power_note"] = (
-                "min_per_arm=%d is BELOW the %d this engine considers powered (~%d observations "
-                "total; the SCED alternating-treatments literature puts sufficient power at "
-                "~28-30 — docs/07 §9). The settle will read `underpowered` and it will be right."
-                % (exp["min_per_arm"], EXPERIMENT_MIN_PER_ARM, EXPERIMENT_MIN_PER_ARM * 2))
+                "min_per_arm=%d is BELOW the %d this engine considers powered for metric "
+                "`%s` (the SCED alternating-treatments literature puts sufficient power at "
+                "~28-30 observations — docs/07 §9). The settle will read `underpowered` "
+                "and it will be right."
+                % (exp["min_per_arm"], _floor, exp.get("metric")))
         items.append(exp)
         write_json(path, items)
         emit(exp)
@@ -3380,7 +3520,7 @@ GOLD_SCORE = {"lapsed": 0, "partial": 1, "recalled": 2}   # ordinal; QWK needs t
 
 # ── THE CANARY (v1.4) ────────────────────────────────────────────────────────────────────
 # A badge is only valid for the grader that earned it. When the model changes underneath a
-# learner (a platform upgrade), the honest options are "re-run the whole 86x3 ceremony" or
+# learner (a platform upgrade), the honest options are "re-run the whole full-set x3 ceremony" or
 # "carry a badge nobody re-earned" — and the second is how a stale pass gets believed. The
 # canary is the cheap third option: a fixed, seed-stable subset that can only ever RE-LICENSE
 # the prior verdict or DEMAND a full re-audit. It can never mint a `pass` (invariant 12).
@@ -3406,7 +3546,12 @@ PARADOX_RETEST = 0.95   # above this consistency, leniency must be strictly unde
 # #5 (the assessor is blind) applied to the audit itself — and RELEASE_PROTOCOL §5.5's
 # hardest lesson: a test that hands the subject the answer is not a test.
 GOLD_ASSESSOR_KEYS = ("topic", "node", "sid", "claim", "rubric", "probe",
-                      "production", "confidence", "kind", "node_kind")
+                      "production", "confidence", "kind", "node_kind",
+                      # v1.14: the learner's stated commonality between two compared cases
+                      # (P19) — an INPUT the assessor scores 0/1/2, not an answer. Omitting
+                      # it here silently un-set the alignment-halo trap (g_087–089): the
+                      # grader never saw the sentence the items exist to test it against.
+                      "alignment")
 # Everything the assessor must never see. The whitelist above already makes that structural;
 # this list is what the BLINDNESS selftest asserts is absent.
 GOLD_SECRET_KEYS = ("gold_grade", "case_type", "rationale")
@@ -3515,15 +3660,29 @@ def load_gold(override=None):
         bundled_sids, local_sids = set(), set()
         source, modified = os.path.abspath(override), True    # not the shipped ground truth
     else:
-        bundled = read_jsonl(os.path.join(_plugin_root(), "gold", "assessor-gold.jsonl"))
+        bundled_path = os.path.join(_plugin_root(), "gold", "assessor-gold.jsonl")
+        bundled = read_jsonl(bundled_path)
         local = read_jsonl(p("gold", "local-gold.jsonl"))
         bundled_sids = {it["sid"] for it in bundled if _valid_gold_item(it)}
         local_sids = {it["sid"] for it in local if _valid_gold_item(it)}
         raw = bundled + local
-        source, modified = "bundled:gold/assessor-gold.jsonl", bool(local_sids)
+        # "bundled" alone is not enough provenance on platforms that EXTRACT the
+        # package (opencode selfExtract, since v1.13.2): the extracted copy is
+        # pinned by never-overwrite semantics, so the file beside the engine can
+        # lag the engine by any number of releases — and an audit would stamp a
+        # years-old ground truth as this release's shipped set. Pin the stamp to
+        # the FILE, not the path: sha256 of the actual bytes, so any skew is
+        # checkable against the repo. (v1.13.2 review finding — the label class:
+        # a provenance field that cannot express staleness will one day lie.)
+        try:
+            with open(bundled_path, "rb") as fh:
+                gold_sha = hashlib.sha256(fh.read()).hexdigest()[:8]
+        except OSError:
+            gold_sha = "absent"
+        source, modified = "bundled:gold/assessor-gold.jsonl@" + gold_sha, bool(local_sids)
         if modified:
-            source = ("bundled + gold/local-gold.jsonl (%d re-adjudicated, %d added)"
-                      % (len(local_sids & bundled_sids), len(local_sids - bundled_sids)))
+            source = ("bundled@%s + gold/local-gold.jsonl (%d re-adjudicated, %d added)"
+                      % (gold_sha, len(local_sids & bundled_sids), len(local_sids - bundled_sids)))
     items, skipped = {}, 0
     for it in raw:
         if _valid_gold_item(it):
@@ -3924,7 +4083,7 @@ def cmd_assessor_audit(args):
     # difficulty, so it is a TRIPWIRE, not a certification: it can re-license the verdict a
     # full audit already earned, or demand a fresh full audit. Anything else and the cheap
     # path would quietly replace the expensive one, which is how a 15-item badge ends up
-    # standing in for an 86-item claim.
+    # standing in for a full-set claim.
     if scope == "canary" and verdict not in ("insufficient-data", "incomplete"):
         # `coverage_complete` belongs in `clean`: a canary that graded a sid twice did not
         # cover its subset, and promoting it to `canary-pass` handed the re-licensing path
@@ -4073,7 +4232,7 @@ def _latest_audit():
         return None
     # ⚠ THE LATEST *FULL* AUDIT — a canary is not a candidate (v1.4). A canary can only
     # re-license or revoke; if it were allowed to BE the latest audit, running one would
-    # replace an 86-item verdict with a 15-item one, and `canary-pass` (not a valid full
+    # replace a full-set verdict with a 15-item one, and `canary-pass` (not a valid full
     # verdict) would read as `unreadable` and silently void a badge that was fine. The cheap
     # path must never overwrite the expensive one — it may only vouch for it.
     for latest in reversed(names):
@@ -4175,7 +4334,30 @@ def compute_grader_health(current_grader_context=None):
     audited_ctx = _str("grader_context")
     current_ctx = current_grader_context if isinstance(current_grader_context, str) else None
     if not unval:
-        if (audited_ctx and current_ctx and audited_ctx not in ("unknown",)
+        # v1.14: A BADGE IS ALSO ONLY AS GOOD AS ITS RULER. `load_gold` stamps the gold
+        # set's sha into `gold_source` and every audit stores it — but nothing ever
+        # compared them, so the first release to grow the gold set would have let a badge
+        # earned on 86 items keep vouching against a set of 89 it never saw. Decisive like
+        # a model swap; the canary (which grades the CURRENT set) can re-license it.
+        # Degrade, never brick (§4.7): an unreadable gold set contributes no trigger here —
+        # the audit path has its own loud complaint for that.
+        try:
+            _gold_now = load_gold()[1].get("source")
+        except Exception:
+            _gold_now = None
+        _gold_then = _str("gold_source")
+        # Same-namespace comparisons only: an audit run against an OVERRIDE file (absolute
+        # path) named its own ruler, and comparing it to the bundled set would expire every
+        # such badge the moment it was earned. Those keep the model/age triggers; the sha
+        # comparison is for the bundled(+local) default path both sides actually took.
+        if (_gold_then and isinstance(_gold_now, str) and _gold_now
+                and not os.path.isabs(_gold_then) and not os.path.isabs(_gold_now)
+                and _gold_then != _gold_now):
+            stale = ("stale-gold", "the gold set this badge was earned on (%s) is not the "
+                                   "one shipping now (%s) — the ruler changed, so the "
+                                   "measurement no longer describes it"
+                     % (_gold_then, _gold_now))
+        elif (audited_ctx and current_ctx and audited_ctx not in ("unknown",)
                 and current_ctx not in ("unknown",) and audited_ctx != current_ctx):
             stale = ("stale-model", "the model that earned this badge (%s) is not the one "
                                     "grading you now (%s)" % (audited_ctx, current_ctx))
@@ -4290,8 +4472,8 @@ def _krippendorff_ordinal(pairs):
     return 1.0 - do / de
 
 def _bootstrap_alpha_ci(pairs, seed=20260724, iters=1000):
-    """Percentile CI for alpha. n=86 gives a WIDE interval — publish it anyway; a point
-    estimate from 86 items quoted without its spread is the label lying about its own
+    """Percentile CI for alpha. n~90 gives a WIDE interval — publish it anyway; a point
+    estimate from ~90 items quoted without its spread is the label lying about its own
     precision (§4.8 Q6)."""
     if len(pairs) < 4:
         return None
@@ -8650,6 +8832,29 @@ def cmd_selftest(_args):
     check("a local gold set that RE-ADJUDICATES the answer is recorded, never passed off as bundled",
           fresh(_local_gold_cannot_certify_silently))
 
+    # -- the bundled-gold provenance pins the FILE, not just the path --
+    # Platforms that EXTRACT the package (opencode selfExtract, v1.13.2) pin the extracted
+    # gold file with never-overwrite semantics, so it can lag the engine by releases while
+    # the audit stamps it as the shipped ground truth. The stamp must therefore be derived
+    # from the file's BYTES — this check recomputes the hash independently and demands the
+    # engine's stamp match it, so a constant string (the old behavior) cannot pass.
+    def _gold_provenance_pins_the_file(h):
+        gold_path = os.path.join(_plugin_root(), "gold", "assessor-gold.jsonl")
+        with open(gold_path, "rb") as fh:
+            expect = hashlib.sha256(fh.read()).hexdigest()[:8]
+        _, meta = load_gold()
+        if meta["source"] != "bundled:gold/assessor-gold.jsonl@" + expect:
+            return False
+        # …and the stamp survives onto the modified-path label too, so a
+        # re-adjudicated run still says WHICH bundled file it started from.
+        os.makedirs(p("gold"), exist_ok=True)
+        with open(p("gold", "local-gold.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps(_gitem("mine_02", "partial")) + "\n")
+        _, meta2 = load_gold()
+        return "bundled@" + expect in meta2["source"]
+    check("the bundled-gold provenance pins the FILE (sha of bytes), not just the path",
+          fresh(_gold_provenance_pins_the_file))
+
     # -- a grader may not mark its own homework twice and keep the better score --
     # The mirror of the dropped-sid bug: `out[sid] = grade` was LAST-WINS, so a grader that got
     # 12 items wrong and re-emitted those sids later in the array (exactly what an LLM
@@ -8880,7 +9085,10 @@ def cmd_selftest(_args):
         _capture(cmd_stash, _ns(action="add", json=json.dumps([{
             "topic": "t", "node": "a", "claim": "c", "rubric": ["r"], "probe": "p",
             "production": "prod", "confidence": 60, "kind": "encode",
-            "node_kind": "procedure"}]), file=None))
+            "node_kind": "procedure",
+            # v1.14: `alignment` is a real (optional) stash-shape key — P19's elicited
+            # commonality rides the entry exactly like node_kind rides procedure items
+            "alignment": "both share the update-in-place structure"}]), file=None))
         stashed = _capture_json(cmd_stash, _ns(action="list", json=None, file=None))
         gold_items = _capture_json(cmd_gold, _ns())
         # both are BARE ARRAYS; every gold key is a stash-shape key; `node_kind` appears
@@ -9992,6 +10200,142 @@ def cmd_selftest(_args):
     check("long production is truncated with a marker",
           len(r_trunc["production"]) == PRODUCTION_MAX and r_trunc.get("production_truncated") is True)
 
+    # -- a long production reaches the blind ASSESSOR intact (issue #17) --
+    # `stash list` is the assessor's entire input, so the stash ceiling is a bound on what the
+    # GRADER IS ALLOWED TO KNOW. At 800 a real free recall arrived cut mid-sentence, the two
+    # rubric criteria in the missing tail could not be verified, and the grade had to be undone
+    # by a manual appeal. What remains is a runaway-paste guard: it must not fire on an answer a
+    # learner actually wrote, and when it DOES fire the mark has to survive into the receipt.
+    def _long_production_reaches_assessor(h):
+        _add_ab()
+        prod = "the learner's answer, at length. " * 40 + "…and the criterion is met HERE."
+        _capture(cmd_stash, _ns(action="add", json=json.dumps(
+            {"topic": "t", "node": "a", "probe": "pa", "production": prod})))
+        listed = _capture_json(cmd_stash, _ns(action="list"))[0]
+        intact = (len(prod) > 800 and listed["production"] == prod
+                  and "production_truncated" not in listed)
+        # the guard still fires — and still tells the truth — on a genuinely runaway paste
+        _capture(cmd_stash, _ns(action="clear"))
+        _capture(cmd_stash, _ns(action="add", json=json.dumps(
+            {"topic": "t", "node": "a", "probe": "pa",
+             "production": "x" * (PRODUCTION_MAX + 50)})))
+        clipped = _capture_json(cmd_stash, _ns(action="list"))[0]
+        return intact and (len(clipped["production"]) == PRODUCTION_MAX
+                           and clipped.get("production_truncated") is True)
+    check("a >800-char production round-trips stash -> assessor input intact",
+          fresh(_long_production_reaches_assessor))
+
+    # -- the truncation mark survives an assessor that DROPS it (issue #17) --
+    # The fix's other half. `production_truncated` used to be recomputed in make_receipt, where
+    # an upstream clip lands at EXACTLY PRODUCTION_MAX and therefore reads as complete. Carrying
+    # the incoming flag is not enough on its own: the item make_receipt sees is the ASSESSOR's
+    # output, so the mark would then depend on a model remembering one optional field. It does
+    # not — the engine recovers it from its own stash entry, by sid, which is still on disk
+    # because apply_item mints the receipt before it drops the stash.
+    def _truncation_mark_survives_a_forgetful_assessor(h):
+        _add_ab()
+        _capture(cmd_stash, _ns(action="add", json=json.dumps(
+            {"topic": "t", "node": "a", "probe": "pa",
+             "production": "y" * (PRODUCTION_MAX + 600)})))
+        graded = dict(_capture_json(cmd_stash, _ns(action="list"))[0],
+                      rating="hard", grade="partial", kind="encode", source="assessor")
+        graded.pop("production_truncated")        # the ONE field a model has to remember
+        _capture(cmd_receipt, _ns(json=json.dumps([graded])))
+        r = _receipts_for("t")[-1]
+        return r.get("production_truncated") is True
+    check("a clip stays marked even when the assessor drops the flag",
+          fresh(_truncation_mark_survives_a_forgetful_assessor))
+
+    # -- the archive holds the LEARNER's words, not the grader's retyping (issue #17) --
+    # The receipt's production was whatever the assessor echoed back, under a "trimmed <= 600
+    # chars" line in its own spec — so the permanent record of a graded production was a model's
+    # transcription, and an appeal had no full text on disk to re-judge against. The stash entry
+    # is both the learner's text and exactly what the grader was handed; the engine archives that.
+    def _archive_is_the_learners_own_text(h):
+        _add_ab()
+        prod = "FULL LEARNER TEXT, in their own words. " * 15   # deliberately under ANY cap
+        _capture(cmd_stash, _ns(action="add", json=json.dumps(
+            {"topic": "t", "node": "a", "probe": "pa", "production": prod})))
+        graded = dict(_capture_json(cmd_stash, _ns(action="list"))[0],
+                      rating="hard", grade="partial", kind="encode", source="assessor")
+        graded["production"] = "the learner said roughly this"      # an echo that drifted
+        _capture(cmd_receipt, _ns(json=json.dumps([graded])))
+        r = _receipts_for("t")[-1]
+        return r["production"] == prod and r.get("production_truncated") is None
+    check("the receipt archives the learner's production, not the assessor's echo",
+          fresh(_archive_is_the_learners_own_text))
+
+    # -- the learner's CONFIDENCE PICK survives the grader (issue #17, sibling) --
+    # The nastier half of the same class, and it is bug class #1 wearing bug class #5's clothes:
+    # confidence is picked by the learner pre-feedback and recorded by the engine, but the receipt
+    # took the assessor's echo. Omit that one field — one line in a strict schema — and the receipt
+    # says `confidence: null`, and `_calibration` drops null rows from its population silently. The
+    # row that goes missing is a high-confidence LAPSE, so Brier and `overconfident_lapses` both
+    # improve. The engine now reads its own stash record, so a grader cannot delete the datum.
+    def _confidence_pick_survives_the_grader(h):
+        _add_ab()
+        _capture(cmd_stash, _ns(action="add", json=json.dumps(
+            {"topic": "t", "node": "a", "probe": "pa", "production": "an answer",
+             "confidence": 90})))
+        graded = dict(_capture_json(cmd_stash, _ns(action="list"))[0],
+                      rating="again", grade="lapsed", kind="encode", source="assessor")
+        graded.pop("confidence")                  # the assessor simply omits it
+        _capture(cmd_receipt, _ns(json=json.dumps([graded])))
+        kept = _receipts_for("t")[-1].get("confidence") == 90
+        # …and the mirror: a DECLINED pick (stashed null) must stay null, so an assessor cannot
+        # invent a confidence for a learner who refused to give one.
+        _capture(cmd_stash, _ns(action="add", json=json.dumps(
+            {"topic": "t", "node": "b", "probe": "pb", "production": "another",
+             "confidence": None})))
+        g2 = dict([e for e in _capture_json(cmd_stash, _ns(action="list"))
+                   if e["node"] == "b"][0],
+                  rating="good", grade="recalled", kind="encode", source="assessor")
+        g2["confidence"] = 85                     # invented out of nothing
+        _capture(cmd_receipt, _ns(json=json.dumps([g2])))
+        declined = _receipts_for("t")[-1].get("confidence") is None
+        # …and the third case, which `"confidence" in stashed` would have let through: the tutor
+        # stashed no confidence AT ALL. The assessor sees only the stash, so a number it supplies
+        # here is invented by definition and must not reach the receipt.
+        _capture(cmd_stash, _ns(action="add", json=json.dumps(
+            {"topic": "t", "node": "a", "probe": "pa", "production": "a third"})))
+        g3 = dict([e for e in _capture_json(cmd_stash, _ns(action="list"))
+                   if e.get("production") == "a third"][0],
+                  rating="good", grade="recalled", kind="encode", source="assessor",
+                  confidence=95)
+        _capture(cmd_receipt, _ns(json=json.dumps([g3])))
+        never_asked = _receipts_for("t")[-1].get("confidence") is None
+        return kept and declined and never_asked
+    check("the learner's confidence pick survives an assessor that drops or invents one",
+          fresh(_confidence_pick_survives_the_grader))
+
+    # -- a hand-corrupted stash degrades the settle, it does not tear it (issue #17) --
+    # Reading the stash inside make_receipt put a hand-editable state file on the WRITE path,
+    # where §4.7's read-path fuzzer cannot see it. A `production` of `42` is valid JSON and pure
+    # corruption; it reached `len(prod)` and killed `receipt` mid-batch — on an append-only log,
+    # that is a tear, not a degraded read. String or nothing, at the gate.
+    def _corrupt_stash_cannot_tear_a_settle(h):
+        _add_ab()
+        with open(p(STASH_FILE), "w") as f:
+            f.write('5\n"a string"\n[1,2]\n{"sid": 7}\n')
+            f.write(json.dumps({"sid": "s_x", "production": 42, "confidence": []}) + "\n")
+            f.write("not json at all\n")
+        # (a) corruption arriving from the STASH, alongside the learner's real answer
+        _capture(cmd_receipt, _ns(json=json.dumps([
+            {"topic": "t", "node": "a", "probe": "pa", "production": "an answer",
+             "sid": "s_x", "rating": "good", "grade": "recalled", "kind": "encode"}])))
+        r = _receipts_for("t")[-1]
+        from_stash = (r["production"] == "an answer" and r.get("confidence") is None
+                      and r.get("production_truncated") is None)
+        # (b) corruption arriving from the AGENT's own JSON, with no stash entry behind it —
+        # the older half of the same hole, reachable since the receipt schema existed.
+        _capture(cmd_receipt, _ns(json=json.dumps([
+            {"topic": "t", "node": "b", "probe": "pb", "production": {"oops": 1},
+             "rating": "good", "grade": "recalled", "kind": "encode"}])))
+        r2 = _receipts_for("t")[-1]
+        return from_stash and r2["node"] == "b" and r2["production"] is None
+    check("a type-corrupt production cannot tear a settle, from stash or agent",
+          fresh(_corrupt_stash_cannot_tear_a_settle))
+
     # -- due --limit 0 means zero, not "all" (N6) --
     def _limit_zero(h):
         _add_ab()
@@ -10323,6 +10667,133 @@ def cmd_selftest(_args):
                 and d["f1"]["node_kind"] == "fact")
     check("due payload carries node_kind + practice (concept/None when undeclared)",
           fresh(_due_kinds))
+
+    # ============== v1.14 · the sense-making layer (docs/16) ==============
+    # -- add-topic: contrast + interactivity validated like viz (warn+drop, never die);
+    #    a scalar `cases` must neither crash the add (TypeError on len()) nor pass as a
+    #    character count — both found by the v1.14 pre-release review --
+    def _sense_validation(h):
+        g = {"topic": "s", "title": "S", "order": ["a", "b", "c", "d"], "nodes": {
+            "a": {"claim": "A", "probe": "pa", "interactivity": "high",
+                  "contrast": {"deep_feature": "d", "cases": ["c1", "c2", "c3"],
+                               "invite": "invent a rule"}},
+            "b": {"claim": "B", "probe": "pb", "interactivity": "weird",
+                  "contrast": {"deep_feature": "d", "cases": ["only-one"]}},
+            "c": {"claim": "C", "probe": "pc", "contrast": "just compare stuff"},
+            "d": {"claim": "D", "probe": "pd",
+                  "contrast": {"deep_feature": "d", "cases": "case one; case two"}}}}
+        out = json.loads(_capture(cmd_add_topic, _ns(json=json.dumps(g))))
+        saved = load_graph("s")["nodes"]
+        return (saved["a"]["interactivity"] == "high"
+                and saved["a"]["contrast"]["cases"] == ["c1", "c2", "c3"]
+                and "interactivity" not in saved["b"]
+                and saved["b"]["contrast"] is None
+                and saved["c"]["contrast"] is None
+                and saved["d"]["contrast"] is None      # a 22-char string is not 22 cases
+                and any("unknown interactivity" in w for w in out["warnings"])
+                and any("needs a list of >=2 cases" in w for w in out["warnings"])
+                and any("contrast block is not an object" in w for w in out["warnings"]))
+    check("add-topic validates contrast + interactivity like viz (warn+drop, never die)",
+          fresh(_sense_validation))
+
+    # -- and a scalar `cases` value must not kill the add with a traceback --
+    def _sense_no_crash(h):
+        out = json.loads(_capture(cmd_add_topic, _ns(json=json.dumps(
+            {"topic": "s2", "title": "S", "order": ["a"], "nodes": {
+                "a": {"claim": "A", "probe": "pa",
+                      "contrast": {"deep_feature": "d", "cases": 3}}}}))))
+        return (load_graph("s2")["nodes"]["a"]["contrast"] is None
+                and any("needs a list of >=2 cases" in w for w in out["warnings"]))
+    check("a non-list contrast.cases degrades with a warning instead of a TypeError",
+          fresh(_sense_no_crash))
+
+    # -- --extend must not warn about, or MUTATE, nodes the payload never touched — the
+    #    same guard (and the same bug class) as the probe/rubric scan above --
+    def _sense_extend_no_mutation(h):
+        _capture(cmd_add_topic, _ns(json=json.dumps(
+            {"topic": "s", "title": "S", "order": ["a"],
+             "nodes": {"a": {"claim": "A", "probe": "pa"}}})))
+        g = load_graph("s")     # simulate a pre-v1.14 store carrying unvalidated junk
+        g["nodes"]["a"]["interactivity"] = "weird"
+        g["nodes"]["a"]["contrast"] = {"deep_feature": "d", "cases": ["only-one"]}
+        save_graph(g)
+        out = json.loads(_capture(cmd_add_topic, _ns(extend=True, json=json.dumps(
+            {"topic": "s", "title": "S", "order": ["b"],
+             "nodes": {"b": {"claim": "B", "probe": "pb"}}}))))
+        a = load_graph("s")["nodes"]["a"]
+        return (a.get("interactivity") == "weird"           # untouched, not deleted
+                and isinstance(a.get("contrast"), dict)     # untouched, not dropped
+                and not any(w.startswith("a:") for w in out["warnings"]))
+    check("--extend leaves un-authored nodes' contrast/interactivity byte-identical",
+          fresh(_sense_extend_no_mutation))
+
+    # -- due payload: contrasts_with siblings ride along (id + claim); ghost, retired,
+    #    SELF, and never-encoded siblings are dropped, never served (a `new` sibling's
+    #    claim is pre-exposure; a self-contrast is the node's own answer) --
+    def _due_contrasts(h):
+        g = {"topic": "s", "title": "S", "order": ["a", "b", "d"], "nodes": {
+            "a": {"claim": "A claim", "probe": "pa",
+                  "edges": {"contrasts_with": ["a", "b", "d", "ghost"]}},
+            "b": {"claim": "B claim", "probe": "pb",
+                  "edges": {"contrasts_with": ["a"]}},
+            "d": {"claim": "D claim", "probe": "pd"}}}
+        out = json.loads(_capture(cmd_add_topic, _ns(json=json.dumps(g))))
+        for n in ("a", "b"):                                # d stays `new`, on purpose
+            _capture(cmd_rate, _ns(topic="s", node=n, rating="good", kind="encode"))
+        os.environ["ENGRAM_TODAY"] = "2026-09-01"
+        d = {i["id"]: i for i in due_items()}
+        before = d["a"]["contrasts_with"] == [{"id": "b", "claim": "B claim"}]
+        _capture(cmd_retire, _ns(topic="s", node="b"))
+        d2 = {i["id"]: i for i in due_items()}
+        return (before and d2["a"]["contrasts_with"] == []
+                and any("itself" in w for w in out["warnings"]))   # self-edge named at ingest
+    check("due contrasts_with drops ghost, retired, SELF, and never-encoded siblings",
+          fresh(_due_contrasts))
+
+    # -- alignment_quality (P19): validated to the literal 0/1/2 scale on the receipt;
+    #    a bool or off-scale value stays honestly absent --
+    def _alignment_receipt(h):
+        _capture(cmd_add_topic, _ns(json=json.dumps(
+            {"topic": "s", "title": "S", "order": ["a"],
+             "nodes": {"a": {"claim": "A", "probe": "pa"}}})))
+        for aq, want in ((2, True), (True, False), (3, False), ("2", False)):
+            apply_item({"topic": "s", "node": "a", "rating": "good",
+                        "grade": "recalled", "alignment_quality": aq}, "encode")
+            r = read_jsonl(p("receipts", "s.jsonl"))[-1]
+            if (("alignment_quality" in r) is not want
+                    or (want and r["alignment_quality"] != 2)):
+                return False
+        return True
+    check("alignment_quality lands on the receipt iff it is a literal 0/1/2 (bools refused)",
+          fresh(_alignment_receipt))
+
+    # -- a badge earned on one gold set must not vouch against another (stale-gold) --
+    def _stale_gold(h):
+        os.makedirs(p("audits"), exist_ok=True)
+        write_json(p("audits", "2026-08-17-01.json"), {
+            "ts": today().isoformat(), "verdict": "pass", "qwk": 0.95, "n": 258, "runs": 3,
+            "grader_context": "platform/model-A",
+            "gold_source": "bundled@deadbeef", "read": "r", "reasons": []})
+        gh = _capture_json(cmd_grader_health, _ns(grader_context="platform/model-A"))
+        return (gh["verdict"] == "stale-gold" and gh["grader_unvalidated"] is True
+                and "ruler changed" in gh["stamp"])
+    check("a gold-set change expires the grader badge (stale-gold, canary-relicensable)",
+          fresh(_stale_gold))
+
+    # -- §4.7: `experiment status` is a READ path and must degrade on a hand-edited file —
+    #    an unhashable metric (dict/list) reached EXPERIMENT_METRIC_MIN.get() and raised
+    #    (found by the v1.14 re-fuzz, after the release's "last" commit, as §4.7 orders) --
+    def _exp_status_degrades(h):
+        write_json(p("experiments.json"), [
+            {"id": "x1", "status": "active", "arms": ["a", "b"],
+             "metric": {"weird": 1}, "min_per_arm": [3], "assignments": None}])
+        try:
+            _capture(cmd_experiment, _ns(action="status"))
+        except SystemExit:
+            pass                     # a guarded die() is an acceptable degrade
+        return True                  # any other exception fails the check by raising
+    check("experiment status survives an unhashable metric in a hand-edited file",
+          fresh(_exp_status_degrades))
 
     # -- the node_kind STAMP: written at grading time, immune to later reclassification --
     def _kind_stamp(h):
@@ -11743,7 +12214,7 @@ def cmd_selftest(_args):
     # -- the shipped presets are real pre-registrations, and load as designs --
     def _presets(h):
         loaded = []
-        for name in ("probe-variation", "topic-reconstruction"):
+        for name in ("probe-variation", "topic-reconstruction", "contrast-first"):
             _capture(cmd_experiment, _ns(action="start", preset=name))
             exp = _as_list(read_json(p("experiments.json"), []))[-1]
             loaded.append(exp)

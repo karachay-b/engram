@@ -292,7 +292,7 @@ know:
   the grader context (platform/model label, supplied by the skill that spawned the runs);
   hard-expire the badge on a context change; offer a cheap **canary re-audit** (a fixed
   ~12–15-item subset oversampling `partial` gold and the two historical-inflation items)
-  before demanding the full 86×3 ceremony; time-expire (90d) when the context is unknowable.
+  before demanding the full-set ×3 ceremony; time-expire (90d) when the context is unknowable.
 - **Multi-model panels are refused, with numbers.** "Nine Judges, Two Effective Votes"
   (2026): a 9-frontier-judge panel delivers ~2 effective independent votes; the best
   single judge matched or beat the panel in all conditions. Engram keeps same-model
@@ -314,7 +314,7 @@ know:
   `partial`s (the band where graders diverge); surface disagreements to the learner
   instead of resolving them silently. The limitation line ships with the number: *tutor
   grades are audited for agreement with the blind assessor, whose own validity is what
-  the 86-item audit measures — tutor validity is bounded by that chain, never better.*
+  the full-set audit measures — tutor validity is bounded by that chain, never better.*
 - **The external-human adjudication kit gets a real protocol** (the repo has asked for
   one human since v0.7; now it has a defensible procedure): one external adjudicator,
   blind to author labels and audit history; a 10-anchor calibration gate (≥80% exact on

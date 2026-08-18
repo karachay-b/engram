@@ -133,7 +133,11 @@ describe("engramUpdateTool", () => {
       expect(result).toContain("Checkpoint saved")
       expect(result).toContain("Remaining:")
       expect(existsSync(resolve(t(tmp), ".engram-update.jsonc"))).toBe(true)
-      expect(existsSync(resolve(t(tmp), ".engram-version.jsonc"))).toBe(true)
+      // A checkpoint that DELETED files must drop the version guard so the
+      // next session's selfExtract restores the holes (v1.13.2 review: the
+      // old behavior — guard intact — left gold/ empty across restarts while
+      // the audit exited 0). The previous assertion here pinned that bug.
+      expect(existsSync(resolve(t(tmp), ".engram-version.jsonc"))).toBe(false)
 
       const manifest = JSON.parse(readFileSync(resolve(t(tmp), ".engram-update.jsonc"), "utf-8"))
       expect(manifest.categories.skills.skipped).toEqual(["skills/review.md"])

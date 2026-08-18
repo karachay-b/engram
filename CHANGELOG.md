@@ -1,5 +1,645 @@
 # Changelog
 
+## 1.14.0 — 2026-08-18 · the sense-making layer (docs/16)
+
+KLI names three learning processes; Engram routed everything through two of them
+(`docs/11` §2 said so itself). This release routes the third — understanding &
+sense-making — as **four gauntlet-verified upgrades to existing beats and edges**, plus
+one new pre-registered experiment. The research pass, the production-bar filter, and the
+three refute-first verifications (9 claims corrected, 6 design rules killed or rewritten
+before implementation) are on the record in `docs/16-the-sense-making-layer.md`.
+
+**Pedagogy (prompt-level)**
+
+- **P18 — contrast-first opening** (`dialogue-grammar.md`, `/learn` step 3): a concept
+  node that passes a four-way gate (non-arbitrary, prior knowledge above the novice
+  floor — *novice gate wins any tie*, no `interactivity: "high"`, an authored `contrast`
+  set) opens with 3–5 contrasting cases and **≥2 ranked committed candidate rules** before
+  any feedback. The firewall is on content, not support: H1–H2 hints stay live, H3–H4 and
+  correctness signals are withheld. Never fires in Sprint mode (the PS-I corpus's own
+  duration finding). RESOLVE after any committed multi-attempt must be **built from the
+  learner's attempts** — quoted verbatim, each missed deep feature named, dialogically
+  (the strongest significant fidelity contrast in Sinha & Kapur 2021: g 0.56 vs 0.20).
+- **P19 — guided analogy pairs at CONNECT**: the analogy card is now a compared pair
+  (canonical case beside the analog, surface-different) with an elicited alignment —
+  correspondences, then the shared relation, then the tutor states the principle. The
+  learner's alignment sentence rides the stash as `alignment`; the assessor scores it
+  0/1/2 as an `alignment_quality=` clause in `rubric_notes` — a transfer *correlate* that
+  never moves the grade, in either direction.
+- **P17 concept clause** (`/review` step 2): a due concept item whose `contrasts_with`
+  sibling survives retirement gets ONE adjacent discrimination step ("which is which, and
+  what single feature decides it?") before its probe — open production, sibling's
+  schedule untouched, `arbitrary: true` exempt (blocking wins for vocabulary), never in
+  quick mode. Shipped explicitly as an **instrumented hypothesis**: the concept-induction
+  evidence is visual and this drill is text (docs/16 §7.7–7.8 hold the open questions).
+- **Concreteness fading tightened one sentence**: when example-first fires, each fade
+  states its correspondence out loud — never a silent notation swap.
+
+**Curriculum (architect + engine, the `viz` opaque-storage covenant)**
+
+- Architect now authors **`contrast`** sets ({deep_feature, cases[], invite} — one
+  feature varies, surfaces held constant, omit when no clean set exists) and flags
+  **`interactivity: "high"`** on genuinely element-interactive nodes. The engine stores
+  both opaquely with warn-and-drop shape checks (`contrast` with <2 cases is dropped;
+  unknown `interactivity` literal is dropped); absence is byte-compatible with v1.13
+  graphs. `due` payloads now carry **`contrasts_with`** siblings (id + claim, retired
+  dropped) so `/review` serves the discrimination pair without a second engine call.
+
+**Experiment layer**
+
+- New pre-registered preset **`contrast-first`** (`experiment start --preset
+  contrast-first`): contrast_first vs resolve_first on P18-gated nodes,
+  `metric: transfer_fired` — because the PS-I benefit reliably hides from sequestered
+  recall (Schwartz & Martin 2004), a retention null settles nothing and the preset says
+  so before any datum exists. The perceptual-fluency track stays **out** (its RCT
+  evidence runs an order of magnitude below its within-subject numbers — docs/16 §6);
+  the explorable-timed classification experiment remains parked with its doctrine
+  carve-out unearned.
+
+**Gold set**
+
+- 3 new adversarial items (`g_087`–`g_089`): the **alignment-halo** (a superb alignment
+  sentence over an empty production stays `lapsed`), its mirror (a clumsy alignment over
+  a complete production stays `recalled`), and the 0/1/2 mid-band.
+
+**What the pre-release review caught in this release itself** (§4.6, ten verified
+findings, all fixed before ship):
+
+- **A scalar `contrast.cases` crashed `add-topic` with a TypeError** (the one command an
+  architect runs unattended), and a *string* passed the ≥2-cases gate as a character
+  count. Now: list-or-dropped, warn-never-die.
+- **The gold audit was serving g_087–089 with their `alignment` stripped** — the
+  whitelist was never extended, so the alignment-halo trap passed vacuously: the grader
+  was never shown the sentence the items exist to test it against. `alignment` is now a
+  gold/stash-shape key.
+- **A self-`contrasts_with` edge passed silently** and would have served the node its own
+  claim as a "sibling" right before free recall; **an unencoded (`new`) sibling's claim
+  was pre-exposure.** Both now dropped at serve time; self-edges named at ingest.
+- **`--extend` re-validated — and mutated — nodes the payload never touched** (the exact
+  bug class the adjacent probe/rubric guard documents). New-field validation now runs
+  only on authored, still-listed nodes.
+- **The discrimination drill's minimal pair was built from claim texts** — handing the
+  learner the canonical answer one turn before the probe. Rewritten: fresh instances
+  only, claims are construction fuel, skip when the pair can't avoid the answer.
+- **`alignment_quality` was an unparseable substring in `rubric_notes`** — a "measured
+  correlate" nothing could measure. It is now a validated 0/1/2 field on the receipt
+  (bools refused; absence stays absent).
+- **The `contrast-first` preset's power_note lied**: it compared against the flat floor
+  of 15 while settle uses the metric-aware floor (8 for `transfer_fired`) — the
+  pre-registration record contradicting the analysis. The note now quotes the same floor
+  the settle enforces.
+- **A gold-set change did not expire the grader badge** — a badge earned on 86 items
+  would have kept vouching against 89 it never saw. New `stale-gold` trigger (sha-
+  compared, canary-relicensable), which v1.14's own gold growth is the first to trip.
+- **Every published gold count still said 86** (README badge alt, prose, ADJUDICATION,
+  docs/13–15, engine comments). All now say 89, with the 0/258 figure honestly scoped to
+  the 86-item set it was earned on.
+- P18's gate width was stated at three different sizes across five files; unified at
+  four, and the preset now warns that `transfer_fired` settles in weeks by design.
+
+**And what the §4.7 re-fuzz caught after the "last" commit, exactly as the protocol
+predicts:** an unhashable `metric` in a hand-edited experiments.json crashed
+`experiment status` — a read path — straight through `_exp_metric_floor`'s dict lookup
+(pre-existing, exposed by fuzzing the sub-action; 600 states, 2 seeds, now 0 crashes).
+Guarded at the gate, locked in with a mutation-tested check.
+
+**The §5.6 user session went agent-run** (RELEASE_PROTOCOL amended): the release agent
+tutors a learner persona agent with a pinned, deliberately-wrong knowledge state in an
+isolated context — the same separation that keeps the assessor blind. This release's
+session (espresso dial-in; report: `docs/user-sessions/v1.14.0-the-agent-learner.md`)
+watched the contrast-first opening kill a confident misconception *before* any teaching,
+scored a 2/2 analogy alignment through the blind grader with the grade unmoved, and
+verdicted **ship** — with its provenance stated and two findings landed in the same
+release: the dose-cap sentence in `/review`'s close, and the architect rule that CONNECT
+analogies and `transfer_probe`s must wear different clothing.
+
+**Selftest 308 → 315** (every new check mutation-tested per RELEASE_PROTOCOL §4.5):
+contrast/interactivity warn-and-drop; the non-list-cases crash path; `--extend`
+non-mutation; `contrasts_with` in the due payload dropping ghost/retired/self/new
+siblings; `alignment_quality` literal validation; `stale-gold` badge expiry;
+`experiment status` degrading on a type-corrupt file.
+
+**Upstream corrections (found by this release's gauntlet)**
+
+- `docs/11` §4: the Brunmair adjacency moderator now carries its real weight (k = 17,
+  four studies, "spaced" = 10–30 *seconds* — presentation lag, not scheduling; the
+  distractor cell g = 0.51 is the one a dialogue drill resembles), and the expertise
+  reversal's "strongest in higher education" is scoped to the novice-benefit side only.
+
+## 1.13.2 — 2026-08-18 · the npm install that never loaded (issues #19, #20)
+
+Both found by an outside reporter (@SK-DEV-AI) with source-verified diagnoses on a fresh
+`opencode-engram-learning` npm install — the install path no release gate had ever run
+end to end. Both reproduced here on a clean opencode 1.18.4 before fixing.
+
+**Packaging**
+
+- **V1 npm installs loaded the V2 adapter and died at startup (#19).** OpenCode 1.x probes
+  `exports["./server"]` *before* `main` — behavior shipping since March — and v1.13.0
+  pointed that key at the V2-only adapter (`{ id, setup }`), so every V1 npm install
+  failed with `must default export an object with server()` and the plugin never
+  extracted, never registered, never appeared. The v1.13.0 claim that "the same package
+  name loads the V1 adapter under V1 and the V2 adapter under V2" was simply false on the
+  V1 side: both runtimes probe the same key, so one key must satisfy both validators.
+  The embarrassing part: the flagship V2 release broke the platform the plugin is named
+  after, and the gap survived because the gates ran the git checkout, never a registry
+  install. Fix: a combined entry (`entry.ts`, `{ id, server, setup }`) behind `main`,
+  `exports["."]`, and `exports["./server"]` — verified against both loaders' sources:
+  V1's `readV1Plugin` requires `server()` and tolerates unknown keys; V2's
+  `PluginModule` schema requires `id` + `setup` and tolerates unknown keys.
+- **The same audit found a second, latent resolution bug the reporter couldn't see:** the
+  *current* V2 line no longer probes `./server` — it resolves the bare package name
+  (`import.meta.resolve`, i.e. `exports["."]`), which pointed at the V1-only adapter. The
+  combined entry closes that one before it ever shipped a symptom.
+- **Fresh extractions failed 10 of 307 selftest checks (#20).** `selfExtract` copied only
+  `skills/`, `agents/`, `scripts/` — but the engine resolves `gold/assessor-gold.jsonl`
+  and `experiments/<preset>.json` from its own location, so every opencode install ran
+  with the gold-audit family and the experiment-preset check broken (297/307, the
+  reporter's exact count, reproduced). `gold/`, `experiments/`, and `docs/` now extract
+  (new-files-only, like everything else) and joined the update-manifest categories so
+  bundled updates to them can ever land. `docs/` closes the secondary finding: the
+  extracted skills cite `docs/*.md`, and the AGENTS.md block installed on every machine
+  promised "engram-docs — resolve to the extracted copy in `.opencode/`" — a reference
+  that had pointed at nothing since v0.x.
+
+**What the pre-release review caught in the fix itself** (§4.5's rule that a fix is a diff
+and gets the full gate, proven again):
+
+- **The first cut of the combined entry would have killed V2 the way v1.13.0 killed V1.**
+  `entry.ts` statically imported `index.ts`, which statically imported `update-tool.ts` —
+  whose top-level `import { tool } from "@opencode-ai/plugin"` + module-scope `tool()`
+  call put a hard SDK link into the V2 load path. The V2 adapter's own design rule
+  ("ZERO @opencode-ai/* imports — the beta reshuffled its root export once already") was
+  voided on the only path V2 actually takes, and the new test suite couldn't see it
+  because the devtree always has the SDK installed. An independent reviewer reproduced
+  both failure modes under Bun (SDK absent; SDK root without `tool` — ESM link errors
+  that fire before any try/catch). `engramUpdateTool` now loads lazily inside `server()`,
+  which only V1 calls; the graph is pinned by a walk-the-imports absence check that was
+  mutation-tested in both directions (re-adding the static import fails it; so does
+  introducing a direct SDK import in entry.ts).
+- **Every version bump told upgraders their agents were "preserved, needs decision" —
+  and showed them the extraction transform played backwards.** The extracted agents can
+  never byte-match the packaged source (extraction injects `mode: subagent`,
+  `hidden: true`, tools map), so the raw compare in `diffCategory` manifested all three
+  agents on every bump, and `.engram-update.diff` presented the new version as *removing*
+  the subagent mode and tool restrictions. Pre-existing since the update system shipped;
+  fixed by comparing (and diffing) through the same transform extraction applies. An
+  existing test had silently pinned the buggy behavior — its version-bump manifest only
+  existed because agents always differed — and had to have a genuine difference added to
+  its fixture.
+- **`docs/` extraction was scoped to what the skills actually cite.** Top-level files
+  only: `docs/release-audits/` and `docs/user-sessions/` are internal process records no
+  skill references, and the AGENTS.md block describes the reference as "foundations,
+  architecture, roadmap". The shallow rule applies to both the extraction copy and the
+  manifest walk (a shared set — if they disagreed, every bump would manifest files
+  extraction never places). `DIRS` is now *derived* from the manifest category list, so a
+  future category can never be added whose files auto-update deletes and extraction
+  cannot restore — the invariant is also pinned by a delete-then-restore round-trip test.
+- **A checkpointed per-file update left the deleted files deleted, across restarts,
+  until the update completed.** The second reviewer reproduced it end to end: delete
+  `gold/assessor-gold.jsonl` in a per-file pass, leave the other categories for later,
+  and the version guard kept `selfExtract` early-returning — so the engine ran from a
+  holed tree indefinitely, the gold audit reported an empty set and *exited 0*, and the
+  only nag said "run /engram-update to continue". Issue #20's symptom, re-entered
+  through the update flow built to deliver its fix. A deleting checkpoint now drops the
+  version guard, so the next session's extract restores every deleted file as the new
+  version while never-overwrite semantics keep the preserved ones; the manifest (written
+  only on a version bump) survives for the remaining decisions. An existing test had
+  pinned the buggy behavior — asserting the guard *survives* a deleting checkpoint — and
+  was corrected.
+- **The update flow's delete paths could escape the target through a symlinked category
+  directory.** `isWithinTarget` is lexical (`resolve` does not follow links), and unlike
+  every other write path in the codebase, `auto`/`per_file` had no symlink guard — the
+  reviewer verified an unlink through a symlinked `docs/` deletes the real file outside
+  the target. Both paths now go through `safeUnlink`: refuse a symlinked file, refuse a
+  parent whose realpath leaves the target. The same rule the copy paths have carried
+  since v1.12.0, finally applied to the deletes.
+- **The bundled-gold provenance now pins the file, not just the path** (engine, +1
+  selftest check, 307 → 308). On extracting platforms the never-overwrite semantics can
+  pin `gold/assessor-gold.jsonl` to an old release while the engine moves on — and the
+  audit would stamp `bundled:gold/assessor-gold.jsonl` as though it were this release's
+  shipped ground truth. The stamp now carries a sha of the actual bytes
+  (`bundled:gold/assessor-gold.jsonl@<sha8>`, and `bundled@<sha8> + local-gold…` on the
+  re-adjudicated path), so skew is checkable against the repo. The new check recomputes
+  the hash independently and fails on a constant string (mutation-tested).
+
+**Verification** — live on opencode 1.18.4 (XDG-isolated): registry 1.13.1 reproduces the
+startup error verbatim; the fixed package loads, extracts all six directories (docs
+shallow), and the extracted tree passes 307/307 (scripts-only tree: 297/307, matching the
+report). The combined entry was also imported under Bun with no SDK and with a reshuffled
+SDK — both load `{ id, server, setup }`. Selftest delta: 307 → 308 (the gold-provenance
+pin; the engine is otherwise untouched but for the version constant); vitest 215 → 231.
+Every new check was mutation-tested — thirteen mutations, each killed by exactly the
+check written for it, including both directions of the SDK-absence check (re-adding the
+static import, and introducing a fresh one).
+
+§7.5 ran against shipped v1.13.0 and found what every pre-release gate had walked past.
+Patched immediately per protocol.
+
+- **The docs pinned users to a dsh version that never ran.** "Verified on 0.1.0-rc.5" —
+  the runtime was 0.1.0-rc.6; rc.5 belongs to the BRIDGE package (0.0.1-rc.5), and the
+  two got conflated into one reassuring number on a preview platform whose README
+  promises breaking changes. Corrected in all three docs, with the bridge pin now named.
+- **A fourth waterfall copy existed, and the release missed it.** The engine-resolution
+  list was extended in the three skills — and not in `agents/engram-artifact-smith.md`,
+  whose own copy the reviewer proved strands a dsh-only machine on the visuals path
+  ("engine not found", exit 2). The consistency test shipped one release ago to stop this
+  drift class hardcoded the three skill files, so it could not see the file that drifted.
+  The smith's copy now carries the candidate, and the test DISCOVERS waterfall copies by
+  their marker instead of enumerating filenames — platform nine inherits the coverage.
+- **The dsh subagent route was unspecified, and the nearest doc pointed the wrong way.**
+  dsh registers `subagent` (fresh context) AND `subagent_fork` (seeds the child with this
+  conversation) — and a forked assessor has read the lesson, which silently breaks the
+  one guarantee the receipts rest on. `skills/_shared/subagents.md` now names dsh in its
+  census and carries the dsh shape: `subagent` only, never `subagent_fork`, child pointed
+  at the agent file by path.
+- **The "complete nudge chain" claim leaned on a probe hook, not the shipped wrapper.**
+  The chain is real — the reviewer independently validated the wrapper's output through
+  the bridge's parse logic (quotes, newlines, CJK, no shell eval) and the
+  `${CLAUDE_PLUGIN_ROOT}`-unset fallback — but the release's own words outran its own
+  receipts one more time. Claims rescoped; "headless and web profiles" narrowed to the
+  web profile that actually ran; the patch template now warns that a duplicated
+  `engram-hooks` insert loads the bridge twice with no diagnostic.
+
+### Tests
+
+215 unchanged in count, one widened: the waterfall suite now checks every discovered
+copy (≥4) for every platform candidate, mutation-verified against the smith's copy.
+`selftest` 307/307.
+
+
+## 1.13.0 — 2026-08-16 · the eighth platform (DeepSeek Harness), and the thinnest port yet
+
+DeepSeek Harness (`dsh`, DeepSeek's everything-is-a-plugin agent harness, developer
+preview) becomes Engram's eighth platform — with **zero adapter code**. dsh natively reads
+directory-bundle `SKILL.md` skills from `~/.agents/skills` (Engram's exact format),
+discovers `AGENTS.md`, bridges unmodified Claude Code hooks, and ships a fresh-context
+subagent tool. The port is a clone, three symlinks, one optional patch block, and one new
+candidate in the skills' engine-resolution waterfall.
+
+### Packaging
+
+- **Engine waterfall** gains `$HOME/.agents/engram` — the shared agent home, phrased as a
+  convention path so any platform that reads `~/.agents` inherits it, not as a dsh-specific
+  branch (§5.7 doctrine: capability paths, never platform names). It sits LAST, behind
+  `$PWD`/git-toplevel — the review built the machine where an earlier position silently
+  shadowed a contributor's checkout. A new consistency suite pins the candidate list
+  byte-identical across all three skills, the order (`$PWD` ahead of the clone), and the
+  fail-closed guard in every skill. (An earlier byte-identical draft of that test caught
+  pre-existing comment drift between the copies; the shipped test deliberately pins only
+  the candidate list — comments legitimately differ per skill.)
+- **`hooks/session-start-dsh.sh` + `dsh/hooks.json` + `dsh/cordis.patch.yml`** — the nudge
+  for dsh's Claude Code hook bridge. The wrapper emits the JSON `additionalContext` shape
+  (the Hermes precedent) because dsh discards plain SessionStart stdout; the patch uses
+  the loader's *insert* form and documents the two-package `dsh plugin add` prerequisite.
+  Claude Code's and Codex's own hook files are byte-unchanged.
+- INSTALL-DSH.md, README row + sub-note (eight platforms), `dsh-plugin` npm keyword,
+  `dsh/` + INSTALL-DSH.md in the tarball.
+
+### The embarrassing parts, kept per protocol
+
+The nudge this release first shipped could not deliver a single character, twice over —
+and the evidence of failure had been read as success. dsh's bridge consumes only the JSON
+`hookSpecificOutput.additionalContext` shape (plain SessionStart stdout is discarded — a
+documented dsh limitation nobody re-read), and the bridge package is not in the dsh npm
+bundle's dependency closure at all: the patch entry naming it was an *override* targeting
+a row that exists in no layer, which the loader skips with a warning — so the recorded
+"clean boot" was the failure mode itself wearing the success signal. The adversarial
+review proved both from dsh's source and this machine's own session records, keylessly.
+The fixes: a JSON-emitting wrapper, the loader's *insert* form (which fails loud on a
+missing package), the honest two-package `dsh plugin add` prerequisite, and a verification
+instruction that checks for a hook EVENT instead of a clean start. Smaller kin, same
+lesson: `cat >>` after the profile template's trailing `[]` is invalid YAML (that one dsh
+does refuse loudly), and the first waterfall-comment amendment was an un-asserted string
+replace that silently no-op'd — the same trap this repo wrote into its release memory one
+version ago, caught this time by the §5.7 blind reader.
+
+### Verification
+
+Keyless, against the real npm `dsh` 0.1.0-rc.6 (2026-08-16): all three skills discovered
+through the documented symlink flow — in `skill.list` AND in a live session's
+`<available_skills>` catalog — and the complete nudge chain proven end to end: insert
+patch → bridge loads → SessionStart fires at agent start (marker probe) → a probe hook's
+JSON context injected into the session inbox (`agent/inbox/spliced`); the shipped
+wrapper's output separately validated through the bridge's parse logic. Still owed, recorded in the user-session report: a model-driven learn loop, the
+subagent spawn route, and sandbox behavior around `~/.claude/learning`. 215 vitest checks
+(+4); `selftest` unchanged at 307 — no engine diff.
+
+
+## 1.12.1 — 2026-08-16 · what the post-release review caught
+
+§7.5 ran against shipped v1.12.0 within the hour and earned its place again. One HIGH,
+patched immediately per protocol.
+
+- **v1.12.0's own hardening made corrupt update-state unrecoverable.** The new manifest
+  shape gate ran before EVERY tool mode — including `cleanup`, the template's designated
+  recovery path for exactly that state. A wrong-shape manifest answered every attempt with
+  "Corrupt manifest: run /engram-update to clean up" — which is the command the user had
+  just run. A closed loop, and under V2 the nudge re-advertised it every session. `cleanup`
+  now runs before any gate that needs a readable manifest (it only unlinks files), and the
+  missing test cell — recovery mode × corrupt state — exists in both flavors. The fix that
+  turned throws into messages had turned one recoverable state into an unrecoverable one:
+  run every gate against the release that adds it.
+- **Manifest writes are now atomic** (tmp + rename), closing the torn-write route INTO that
+  corrupt state. v1.12.0 made the version file atomic and left the three manifest writes
+  beside it plain; the reviewer read the asymmetry.
+- **Mid-session update resolution no longer leaves the tree holed until a service
+  restart:** the per-session hook now also re-runs the (version-guarded, idempotent)
+  extraction, so files removed by `/engram-update` are restored on the next session with
+  the domain reloads to match. v1.12.0 moved the update *surface* to per-session cadence
+  but left re-extraction bound to server start.
+- **The /engram-update decision screen no longer prints "0 added" unconditionally** — the
+  added count was structurally always zero (extraction copies new files before the diff
+  runs), a number wrong in the reassuring direction on the screen where the user decides.
+  The screen now reports only what is true there: preserved files that differ. Inherited
+  wording, first flagged here.
+- Docs: INSTALL-OPENCODE-V2.md claimed 189 checks (a count from mid-hardening; it is 206 —
+  211 after this patch), listed the legacy `command/` dir the code deletes, and said the
+  nudge fires "once per server process" when the release's own headline fix made it
+  per-session. The one document a V2 user reads now agrees with the code. A template
+  branch cue that no tool message ever emits ("remaining is empty") now matches the real
+  completion message.
+
+### Tests
+
+206 → 211 (cleanup × corrupt-JSON, cleanup × wrong-shape, atomic checkpoint, per-session
+re-extraction, and its no-op guard). Both headline fixes mutation-tested. `selftest`
+unchanged at 307.
+
+
+## 1.12.0 — 2026-08-16 · OpenCode 2.0: a second entry point, one engine (#18)
+
+OpenCode 2.0 (the `opencode2` beta) replaced its plugin API and does not load V1 plugins —
+issue #18 (thanks, DanRioDev, for the unusually precise port plan). Engram now ships **both
+adapters in one package**; `opencode` and `opencode2` can run side by side against one
+install, one extracted tree, one learner state. The engine, skills, agents, and every other
+platform are untouched in this release.
+
+### Packaging
+
+- **`.opencode-plugin/v2.ts`** — the V2 adapter. Deliberately imports nothing from
+  `@opencode-ai/*`: the V2 SDK's `Plugin.define` is the identity function, so a plain
+  `{ id, setup }` object is a valid plugin, and the beta reshuffled its package exports
+  twice in one week (V1 API moved to `/v1`, promise API took the root). Every V2 domain is
+  feature-detected, both hook call forms of the beta SDK lines are supported, and every
+  hook and transform callback degrades to silence — an older beta loses features, never
+  crashes the host. setup returns a cleanup that disposes its registrations.
+- **One package name serves both engines.** V2's npm resolution probes a package's `server`
+  export subpath before the root, so `package.json` now exports `./server` → the V2 adapter
+  while `main` keeps serving V1. `"opencode-engram-learning"` in either config key does the
+  right thing. (Do not write `"pkg/v2"`-style entries — V2 never splits subpaths off config
+  strings, and npm-package-arg misparses that form as a GitHub repo spec.)
+- **Shared engine extracted, not duplicated:** `update-core.ts` (the deterministic
+  `engram_update` logic, now self-validating) and `update-command.ts` (the `/engram-update`
+  template) feed both entries, so the update procedure can never drift between V1 and V2.
+  V1's behavior is unchanged; its suite runs through the delegation untouched.
+
+### Behavior under V2 (differences a user can see)
+
+- The command surface is the same files the shared `selfExtract` has generated since
+  v1.10.x (`commands/`, V2's canonical discovery dir). V2 adds exactly one file of its own:
+  `/engram-update` as a generated command while an update is pending, removed — guarded by
+  its own H1, so a user's own file with that name is never touched — when resolved, with an
+  explicit `command.reload()` so it appears and disappears without a restart.
+- The update surface is re-checked **once per session**, not once per server boot: V2 runs
+  plugins inside a long-lived background service, and a version bump can land mid-life
+  (V1 running beside V2 extracts it into the shared target). Notification, command file,
+  and the `engram_update` tool all surface on the next session.
+- The update toast is gone under V2 — its plugin API has no toast surface. The
+  system-prompt notification (nudge + pending-update line, once per session — V1's cadence,
+  since V1 ran one process per session) remains.
+- Extracted agent files keep the V1 frontmatter (`tools:` object) so both engines can share
+  them; V2 treats `tools:` as legacy and the assessor's blindness rides on its prompt, as
+  it already does on OpenClaw.
+
+### The embarrassing parts, kept per protocol
+
+The first cut of the adapter took `process.cwd()` as the workspace — the V1 assumption. V2
+runs plugins inside a **background service shared across projects**, so cwd is the
+service's directory, and the end-to-end smoke test extracted Engram into the tester's real
+`~/.config/opencode/` instead of the project. Every unit test was green; only checking the
+global directory after the live boot caught it. The adapter now reads the workspace from
+the `location` wrapper V2 puts on every domain response (`agent.list` → `command.list`),
+and when **no** domain reports a location it goes hooks-only rather than guessing — a
+wrong-directory write is strictly worse than a missing feature.
+
+The pre-release adversarial review (three reviewers, extracted trees) then found what the
+first e2e could not: model-supplied tool input reached `runEngramUpdate` unvalidated under
+V2, and one malformed per-file decision (a missing `action`) was silently consumed from the
+manifest's skipped list — recorded KEPT, never refreshed, category drained, user told the
+update completed. update-core now validates its own input AND the hand-editable manifest's
+shape (message, never a throw, never a consumed entry). The same review caught
+`writeFileSync` following symlinks in the agent transform loop — in a contributor checkout
+that rewrites the canonical `agents/` files every other platform ships — now lstat-guarded
+at both write sites. And porting those guards onto a moved import line produced one more
+lesson: an un-asserted string replace no-oped, `lstatSync` stayed unimported, and the
+guard's own `catch { continue }` silently skipped every agent — caught only because main's
+install suite diffs real extractions.
+
+The failure-mode reviewer (whose report arrived last, executed rather than reasoned)
+retired three more: the `/engram-update` file's deletion guard matched any file that merely
+QUOTED its heading and its write path had no guard at all — ownership is now an exact
+generated-header prefix on both paths, with a symlink skip for dotfiles-managed configs; a
+second version bump silently stripped `tools:` from already-transformed subagents (the line
+parser reads a nested map as empty — shipped behavior since the first OpenCode release,
+fixed by skipping files already carrying `mode: subagent`); and a torn
+`.engram-version.jsonc` downgraded the next start to a fresh install with no update
+manifest — the write is atomic now. Two live-runtime facts no docs carry, found by calling
+the tool in a real session: default-options tools route through the codemode meta-tool and
+are NOT callable by name (`engram_update` registers `codemode: false`), and a result that
+declares `output` without an output schema is rejected — the belt-and-suspenders dual-field
+return from an earlier review fix was itself the bug.
+
+Two near-misses worth recording: `{ id, server }` alone is **rejected** by the V2 loader
+(the schema demands a setup/effect function — verified by running the actual loader schema,
+not by reading docs), and V2 plugin load failures are **silent** (a log-level warning), so
+a broken adapter shows nothing unless the user reads logs. Both shaped the design: separate
+entry point, zero SDK imports, verified against the shipping `opencode2 v0.0.0-next-17444`
+binary — whose bundled source maps, not the (lagging) docs, were the ground truth.
+
+### Tests
+
+164 → 206 vitest checks (42 new: V2 setup registrations, per-session update surfacing,
+workspace-directory resolution incl. the service-cwd regression, the hooks-only fallback
+and the extraction-scope guard, header-ownership on the update command file, update-core
+input + manifest-shape validation, symlink write-through guards, double-transform
+idempotence, atomic version writes, SDK-drift tolerance, schema parity across the three
+input-schema copies). Every
+load-bearing new check mutation-tested (fix reverted → that check fails). `selftest`
+unchanged at 307 — no engine diff, so no new fuzz or numbers surface this release.
+End-to-end verified on `opencode2 v0.0.0-next-17444`: plugin active, fresh install
+self-extracts into the project, command surface live in the same boot, `AGENTS.md`
+written, zero writes outside the workspace.
+
+
+## 1.11.2 — 2026-08-11 · The engine stopped taking the grader's word for it
+
+An outside report ([#17](https://github.com/nagisanzenin/engram/issues/17), thanks
+[@tyteachestech](https://github.com/tyteachestech)), found in a real session and reported with a
+working patch and a mutation-checked test. It is a good bug: nothing crashed, no test went red,
+and the damage landed on a learner's grade.
+
+**`stash add` clipped productions at 800 characters before the blind assessor ever saw them.**
+`stash list` *is* the assessor's entire input, so `PRODUCTION_MAX` was never a storage bound — it
+was a bound on **what the grader is allowed to know**. 800 sits inside the range of an ordinary
+long free recall. A thorough answer arrived cut mid-sentence, two rubric criteria fell in the
+missing tail, the assessor correctly refused to credit what it could not see, and the item came
+back `partial`/`hard`. Fixing it took a manual appeal with the full text passed back out of band.
+
+**And the marker added in #2 so a clip could never be silent did not survive to the receipt**, for
+two independent reasons: `make_receipt` *recomputed* `production_truncated` rather than carrying
+it, and a stash clip arrives at **exactly** `PRODUCTION_MAX`, where `len(prod) > PRODUCTION_MAX`
+is `False` — so the receipt claimed a complete production; and the assessor's output schema had
+no such field, so a correctly-set flag died at the agent boundary anyway. The reporter's receipt
+read `production_truncated: None`. The clip was invisible everywhere except in the grade.
+
+### Engine
+
+- **`PRODUCTION_MAX` 800 → 2400.** Clears a thorough recall (~400 words) and stays cheap in
+  assessor prompt tokens. What remains is a runaway-paste guard, and the report's own reasoning
+  for keeping it low is the reason it is 2400 and not higher. The cap was never protecting
+  anything it was thought to protect: `export` builds its payload as a **whitelist by name** and
+  `production` has no code path into it (CONTRIBUTING-DATA.md's promise is structural, not this
+  constant's doing), and the stash is transient — drained per-`sid` on apply and cleared each
+  settle.
+- **The receipt now archives the production from the STASH, not from the grader's echo.**
+  `apply_item` mints the receipt *before* it drops the stash entry, so the text the blind
+  assessor was actually handed is still on disk; the engine reads its own record and falls back
+  to the item only when no entry matches (the sid-less `rate` path). Two things follow. The
+  truncation flag is **carried by code instead of by an instruction a model has to remember** —
+  it survives an assessor that omits the field, which the reporter's patch could not do because
+  its flag still travelled through the agent. And the permanent record of a graded production is
+  now **the learner's words** rather than a model's retyping of them, bounded at ≤600 chars by
+  the assessor's own spec — which is why the appeal in the report had no full text on disk to
+  re-judge against.
+- **The learner's confidence pick survives the grader — and this is the worse bug of the two.**
+  Found by §4.5's grep-for-siblings rule while fixing the above; it was not in the report, and it
+  is older than the bug that was. `confidence` is picked pre-feedback and recorded by the engine
+  at stash time, but the receipt took the assessor's *echo* of it. An assessor that simply
+  **omitted** one line of a strict schema wrote `confidence: null`, and `_calibration` drops
+  null-confidence rows from its population **without saying so**. The row most likely to vanish
+  is the high-confidence **lapse** — which the assessor's own spec calls "precisely the case most
+  valuable to catch" — and that row is a `(0.9, 0)` pair, the maximally-wrong prediction.
+
+  Measured on the rendered dashboard, identical input to both engines (16 reviews all at
+  confidence 90, five of them lapsed, grader omits confidence on the lapses):
+
+  ```
+  v1.11.1   Brier 0.010 · bias -0.100 → underconfident · n=11
+  v1.11.2   Brier 0.260 · bias +0.212 → overconfident  · n=16
+  ```
+
+  **The verdict was inverted, not merely understated.** A learner who confidently failed five
+  reviews was told they were *under*confident — the most flattering sentence this engine can
+  produce, and the opposite of the truth. Beside it the dashboard printed *"(only answers where
+  you actually stated a confidence count)"*; they had stated one on all sixteen. Bug class #7
+  wrapped around bug class #1, produced by bug class #5.
+
+  It is live, at a low rate: of 29 assessor-graded receipts in the author's own store, **one**
+  carries a null confidence, and it is a `lapsed`. Whether the learner declined there or the
+  grader dropped it is **unrecoverable** — which is the defect, not a footnote: the old design
+  gave those two facts the same representation. The engine now reads its own stash record, and
+  the mirror case is structural too — a **declined** pick (stashed null) stays null, so "never
+  invent a confidence" is no longer only an instruction. Receipts already written cannot be
+  repaired and are not backfilled; the stash entries behind them are gone.
+- The archived `probe` comes from the stash for the same reason. Nothing reads a receipt's
+  `probe` today, so this changes no number — it is consistency, not a fix, and is listed as such.
+
+### Agents
+
+- `agents/engram-assessor.md` and `codex/agents/engram-assessor.toml`: the `production` echo is
+  ≤2400 to match the engine ceiling, and `production_truncated` is passed through when the input
+  item carries it. Both are now belt to the engine's braces rather than the mechanism itself.
+
+### Gates
+
+Selftest **302 → 307**, every new check mutation-tested one-to-one against the specific line it
+guards. Three things worth writing down, because each is a gate catching the release that added it:
+
+- **§4.5's grep-for-siblings produced the confidence bug above.** It was not in the report, it is
+  older than the report's bug, and it is the more damaging of the two. The rule earned its place
+  again.
+- **Reading the stash inside `make_receipt` put a hand-editable state file on the WRITE path**,
+  where §4.7's read-path fuzzer structurally cannot see it. A stashed `production` of `42` is
+  valid JSON and pure corruption; it reached `len(prod)` and killed `receipt` **mid-batch** — on
+  an append-only log that is a tear, not a degraded read. Fixed at the gate (string or nothing),
+  which also closed the older half of the same hole: a non-string `production` in the *agent's*
+  own JSON had been able to do it since the receipt schema existed. `scripts/fuzz.py` now builds
+  a corrupt stash and fuzzes `stash list`/`stash count`, which had never been fuzzed at all —
+  they are read-only sub-actions of a mutating command, exactly the blind spot the `experiment
+  status` amendment was written about. **0 crashes / 600 states / 21,000 calls**, re-run after
+  the last commit.
+- **The first version of the corruption check was theatre**, and the mutation test said so:
+  reverting the item-side guard left it green, because its fixture only ever corrupted the stash
+  side. It now feeds corruption from both directions and fails to either mutation. That is the
+  sixth fake check this protocol has caught, and it was written *by the person who had just
+  finished writing about fake checks.*
+- **The confidence fix shipped subtly wrong for an hour.** The first version asked
+  `"confidence" in stashed` — which reads as equivalent to "did the engine record a pick?" and is
+  not. `stash add` does not require the field, so an entry can carry no confidence at all, and
+  that version fell back to the assessor's echo there: precisely the invention hole it was
+  written to close, surviving inside its own fix. A matched stash entry is now authoritative
+  present, null, **or absent**. Caught in the §4.6 self-review, not by any test — the test that
+  would have caught it did not exist until the review demanded it.
+
+The §2 version-bump grep **missed `INSTALL-PI.md`**, which carried the selftest count in two
+places — the "grep for the N+1th" rule catching the very step that lists where to grep. The live
+command is updated; the historical v1.11.0 figure is now pinned to its version so it cannot be
+read as a current claim.
+
+### What the dogfood measured (§5.5)
+
+The installed plugin was **1.2.2** — nine minors behind — so the graders were driven off the
+release tree by absolute path, per §5.5's second rule. Two blind spawns, no shared context, each
+handed a literal items file and nothing else. Same learner answer, same rubric, same probe; the
+only difference is the clip. The answer is a genuine explanation of the spacing effect whose
+third criterion is first satisfied at **character 931**:
+
+| what the grader was handed | grade | rating | stability | next due |
+|---|---|---|---|---|
+| the whole answer (1083 chars, v1.11.2) | `recalled` | `easy` | 13.82 | +14 days |
+| clipped at 800 (v1.11.1) | `partial` | `hard` | 1.40 | +1 day, back to `learning` |
+
+The clipped grader's own words: criterion 3 *"MISSED … the text ends mid-word ('is the me') and
+the why was never produced."* It graded correctly. It was simply not shown the sentence. **A
+learner who had explained the concept completely would have had that node knocked back into
+`learning` with a tenth of the stability and a review the next morning** — and the receipt saying
+so is append-only. That is the whole bug, priced.
+
+Both runs returned `sid` verbatim and `grader: "engram-assessor"` rather than a fabricated model
+id; the clipped run correctly emitted `production_truncated: true` from the flag its input
+carried, and the whole run correctly omitted it. The receipt archived the learner's production
+**byte-identical** to the stash and kept `confidence: 75`. Unprompted, both runs independently
+flagged `probe_gap: [1]` on the fixture's own probe — v1.10's curriculum check working on a card
+written for this test.
+
+### Which gates ran, and which did not
+
+Green: §4 selftest (307/307), §4.5 mutation (one-to-one, every new check), §4.7 fuzz (0/600,
+re-run after the last commit, now with stash coverage), §4.8 numbers audit
+(`docs/release-audits/v1.11.2-numbers-audit.md`), §5 live test including the read-only hash gate
+against the real store, §5.5 dogfood above. §5.7 is **not triggered** — no platform added or
+changed, `skills/` untouched — and the two assessor specs were checked in sync anyway.
+
+Two gates did **not** run in the form the protocol specifies, and neither is a formality:
+
+- **§4.6 `/code-review high`.** The multi-agent cloud review is user-triggered and billed; it
+  cannot be launched from inside a session. What ran instead was a hand adversarial pass over the
+  diff, which found the `"confidence" in stashed` near-miss above and the batch-performance
+  question (60-item settle: 0.40s, no regression). **That is not a substitute for an independent
+  reviewer**, and by this protocol's own accounting — 10 defects behind 79 green checks, 9 behind
+  110, 8 behind 155 — the expected number of remaining defects here is not zero.
+- **§5.6 the user session.** Requires a human learning something they do not know, and its
+  honest half ("the *feel* of returning after three days cannot be faked with `ENGRAM_TODAY`")
+  requires real days. Not run. This release does not touch the tutoring loop, the retention
+  protocol, or the ambient surface — but the gate exists precisely because that reasoning has
+  been wrong before.
+
+§7.5's post-release review is therefore carrying more weight than usual, and should be run
+against shipped `main` with the standing instruction: *find a number that is wrong in the
+direction that reassures the learner.* This release found one that had been shipping since
+confidence existed.
+
 ## 1.11.1 — 2026-08-04 · What the post-release review caught
 
 §7.5 ran on schedule against shipped main and found the exact bug class it exists for, in the

@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.11.1-6D4AA8.svg" alt="Version 1.11.1">
+  <img src="https://img.shields.io/badge/version-1.14.0-6D4AA8.svg" alt="Version 1.14.0">
   <a href="https://www.npmjs.com/package/opencode-engram-learning"><img src="https://img.shields.io/npm/v/opencode-engram-learning?label=npm&color=6D4AA8" alt="npm package"></a>
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="MIT License">
-  <img src="https://img.shields.io/badge/selftest-302%2F302-3E7D5A.svg" alt="302/302 checks">
-  <a href="gold/assessor-gold.jsonl"><img src="https://img.shields.io/badge/grader%20inflations-0%2F258-3E7D5A.svg" alt="0 of 258 blind judgments graded up, on the shipping spec"></a>
+  <img src="https://img.shields.io/badge/selftest-315%2F315-3E7D5A.svg" alt="315/315 checks">
+  <a href="gold/assessor-gold.jsonl"><img src="https://img.shields.io/badge/grader%20inflations-0%2F258-3E7D5A.svg" alt="0 of 258 blind judgments graded up — earned on the 86-item set; 89 since v1.14, re-audit enforced by stale-gold"></a>
   <img src="https://img.shields.io/badge/scheduler-FSRS--4.5-6D4AA8.svg" alt="FSRS-4.5">
   <a href="CONTRIBUTING-DATA.md"><img src="https://img.shields.io/badge/data-100%25%20local-3E7D5A.svg" alt="100% local — the engine has no network code, proven by a permanent selftest"></a>
   <a href="https://discord.gg/temm1e"><img src="https://img.shields.io/badge/discord-community-5865F2.svg" alt="Discord community"></a>
@@ -17,7 +17,7 @@
 
 > **The mix-up worth clearing first: Engram is not an agent-memory plugin.** It doesn't give your agent persistent memory, context, or knowledge of your codebase — memory MCPs and context tools do that, *for the agent*. Engram points the other way: **it's a learning system for the human.** Your agent becomes a tutor that makes you do the thinking, a blind examiner that checks you actually got it, and a scheduler that brings each idea back right before your brain drops it. The agent doesn't get smarter. **You do — measurably, with receipts.**
 
-Born as a Claude Code plugin; the same skills and engine now run on seven agentic platforms — including, as of v1.0.8, one that puts the tutor in your chat app:
+Born as a Claude Code plugin; the same skills and engine now run on eight agentic platforms — including, as of v1.0.8, one that puts the tutor in your chat app, and, as of v1.12.0, both OpenCode generations (the 2.0 beta rebuilt its plugin API; Engram ships adapters for both in one package):
 
 ```bash
 claude plugin marketplace add nagisanzenin/engram
@@ -28,15 +28,17 @@ claude plugin install engram@engram
 |---|---|---|
 | **Claude Code** (born here) | the two commands above | `/learn` `/review` `/coach` |
 | **OpenAI Codex** | `codex plugin marketplace add nagisanzenin/engram` then `codex plugin add engram@engram` → [INSTALL-CODEX.md](INSTALL-CODEX.md) | `$learn` `$review` `$coach` |
-| **OpenCode** | `"plugin": ["opencode-engram-learning"]` in `opencode.json` ([npm](https://www.npmjs.com/package/opencode-engram-learning)) | `/learn` `/review` `/coach` |
+| **OpenCode** (v1 **+ 2.0 beta**) | `"plugin": ["opencode-engram-learning"]` in `opencode.json` ([npm](https://www.npmjs.com/package/opencode-engram-learning)); `opencode2` → [INSTALL-OPENCODE-V2.md](INSTALL-OPENCODE-V2.md) | `/learn` `/review` `/coach` |
 | **Hermes Agent** | clone + `skills.external_dirs` → [INSTALL-HERMES.md](INSTALL-HERMES.md) — verified live on v0.18.2 | `/skill learn` (or `/study`) `/review` `/coach` |
 | **Google Antigravity** | `agy plugin install https://github.com/nagisanzenin/engram` | `/learn` `/review` `/coach` |
 | **OpenClaw** | `openclaw plugins install engram --marketplace nagisanzenin/engram` → [INSTALL-OPENCLAW.md](INSTALL-OPENCLAW.md) — verified on 2026.7.1-2 | `/learn` `/review` `/coach` |
 | **Pi** | `pi install git:github.com/nagisanzenin/engram` → [INSTALL-PI.md](INSTALL-PI.md) — verified on 0.83.0 & 0.74.2 | `/learn` `/review` `/coach` |
+| **DeepSeek Harness** | clone + 3 symlinks → [INSTALL-DSH.md](INSTALL-DSH.md) — no adapter code, all stock dsh surfaces; verified on 0.1.0-rc.6 | `/learn` `/review` `/coach` |
 
-<sub>OpenCode: `opencode.json` is read globally (`~/.config/opencode/opencode.json`) or per-project; pin to source instead of npm with `"plugin": ["git+https://github.com/nagisanzenin/engram.git"]`.</sub><br>
+<sub>OpenCode: `opencode.json` is read globally (`~/.config/opencode/opencode.json`) or per-project; pin to source instead of npm with `"plugin": ["git+https://github.com/nagisanzenin/engram.git"]`. **OpenCode 2.0 beta** (`opencode2`) uses a new plugin API — same package name works there too (V2 auto-selects the right adapter): [INSTALL-OPENCODE-V2.md](INSTALL-OPENCODE-V2.md).</sub><br>
 <sub>Antigravity: The due-review session nudge isn't ported yet, and the `architect` and `smith` subagents are currently dropped by AG 1.1.4's strict installer. Everything else works the same.</sub><br>
 <sub>OpenClaw: the nudge needs `openclaw config set hooks.internal.enabled true` (OpenClaw ignores plugin hooks until internal hooks are switched on), and it fires on `/new` and `/reset` rather than every session. Engram's agents aren't registered — the skills spawn them through `sessions_spawn` with isolated context instead, which keeps the assessor blind. Details in [INSTALL-OPENCLAW.md](INSTALL-OPENCLAW.md).</sub><br>
+<sub>DeepSeek Harness: developer preview — the port uses only stock dsh capabilities (native `~/.agents/skills` discovery, the Claude Code hook bridge for the nudge), so harness drift degrades a surface rather than crashing. Needs a DeepSeek API key. Skills-in-session and the full nudge chain are verified on the real runtime; a model-driven session is not yet — first-run reports welcome. Details in [INSTALL-DSH.md](INSTALL-DSH.md).</sub><br>
 <sub>Pi: no subagent tool by design — the skills spawn the blind assessor as a fresh `pi -p` process instead (isolation by process boundary). The nudge is one TUI notice at session start plus one injected message on your first prompt (worst case the next one — the probe never blocks startup). Details in [INSTALL-PI.md](INSTALL-PI.md).</sub>
 
 Then, inside your coding assistant (command spelling per your platform's row above):
@@ -211,7 +213,7 @@ So we built the audit and ran it. **Then the gold set failed before the grader d
 
 | | |
 |---|---|
-| **0 of 258** | blind judgments — 86 gold items (86% adversarial) × 3 independent runs — where the grader awarded **more** credit than the strict rubric reading. **Zero, on the spec that ships — and it is a repaired zero, not an untested one.** Extending the set to procedure items ran the audit three times over 774 judgments and caught **3 real inflations**, each traced to an ambiguity in the grader's own instructions (one of them introduced by this release). All three are closed; the number was re-earned, not extrapolated. The full account, including what the fixes cost: [docs/release-audits/v1.1.0-grader-audit.md](docs/release-audits/v1.1.0-grader-audit.md). |
+| **0 of 258** | blind judgments — the 86-item gold set as of v1.4 (86% adversarial) × 3 independent runs — where the grader awarded **more** credit than the strict rubric reading. **Zero, on the set it was earned on — and it is a repaired zero, not an untested one.** (v1.14 grew the set to 89 with three analogy-alignment traps that have not yet sat the ceremony; the engine now *expires the badge itself* when the gold set changes — `stale-gold` — so a re-audit is enforced, not hoped for.) Extending the set to procedure items ran the audit three times over 774 judgments and caught **3 real inflations**, each traced to an ambiguity in the grader's own instructions (one of them introduced by this release). All three are closed; the number was re-earned, not extrapolated. The full account, including what the fixes cost: [docs/release-audits/v1.1.0-grader-audit.md](docs/release-audits/v1.1.0-grader-audit.md). |
 
 That is a claim about **safety**, and it is the reason the badge above says what it says. A grader that errs low makes you re-drill something you had earned — annoying, and it costs you time. A grader that errs *high* tells you that you know something you do not, and **you stop reviewing.** Only one of those is a trap, and this grader has never walked into it.
 
@@ -233,9 +235,9 @@ That is why the badge is no longer a QWK. **`0/258 graded up` is a safety proper
 
 One genuine disagreement (`g_054`) is **deliberately left in**, because the reviewer read both readings and judged the gold's defensible. *An instrument with no disagreement left in it measures nothing.*
 
-**The gold set is public** — [`gold/assessor-gold.jsonl`](gold/assessor-gold.jsonl), 86 items, **86% adversarial**: *fluent-but-empty*, *terse-but-correct*, *confident-and-wrong*, *right-answer-wrong-reason*, *paraphrase*, *partial-credit boundary*, and — new in v1.1 — *right-answer-wrong-method*, *slip-vs-conceptual*, *fluent-wrong-step*, *terse-but-correct-solution*. Every corrected item carries a `disputed` record with its original grade, so the correction is auditable rather than laundered. Run it yourself: `/coach audit`. **Dispute an item** — drop it in `gold/local-gold.jsonl` and it overrides ours (the audit will say it did).
+**The gold set is public** — [`gold/assessor-gold.jsonl`](gold/assessor-gold.jsonl), 89 items: *fluent-but-empty*, *terse-but-correct*, *confident-and-wrong*, *right-answer-wrong-reason*, *paraphrase*, *partial-credit boundary*, — new in v1.1 — *right-answer-wrong-method*, *slip-vs-conceptual*, *fluent-wrong-step*, *terse-but-correct-solution*, and — new in v1.14 — *alignment-halo*, *alignment-surface*, *alignment-partial* (a beautiful analogy-alignment sentence must not lift an empty production, and vice versa). Every corrected item carries a `disputed` record with its original grade, so the correction is auditable rather than laundered. Run it yourself: `/coach audit`. **Dispute an item** — drop it in `gold/local-gold.jsonl` and it overrides ours (the audit will say it did).
 
-**What would actually fix this:** one human, who is not us, adjudicating 86 items — and the two categories where the author and the grader now disagree in every run (`right-answer-wrong-method`, `procedure-partial-boundary`) are where that human would earn their keep first. That is the highest-value contribution anyone could make to this repository, and until it happens the engine will keep saying so out loud. **Since v1.4 there is a procedure for doing it** — a 10-anchor calibration gate, then QWK and ordinal Krippendorff's α with a bootstrap CI, against thresholds fixed before anyone reads the file: **[docs/ADJUDICATION.md](docs/ADJUDICATION.md)**, scored by `engram.py adjudication-stats`. One external rater *corroborates* the authored gold; replacing it would take two who agree with each other, and the engine keeps saying that too.
+**What would actually fix this:** one human, who is not us, adjudicating 89 items — and the two categories where the author and the grader now disagree in every run (`right-answer-wrong-method`, `procedure-partial-boundary`) are where that human would earn their keep first. That is the highest-value contribution anyone could make to this repository, and until it happens the engine will keep saying so out loud. **Since v1.4 there is a procedure for doing it** — a 10-anchor calibration gate, then QWK and ordinal Krippendorff's α with a bootstrap CI, against thresholds fixed before anyone reads the file: **[docs/ADJUDICATION.md](docs/ADJUDICATION.md)**, scored by `engram.py adjudication-stats`. One external rater *corroborates* the authored gold; replacing it would take two who agree with each other, and the engine keeps saying that too.
 
 **One more thing the literature insists on, and the engine enforces:** high consistency is *not* correctness. A judge has been measured at test–retest **0.992** with a position bias of **0.192** — perfectly reproducible and systematically wrong ([docs/07](docs/07-the-measured-loop.md) §3). Engram's assessor is *prompted* to be a skeptic, so it is self-consistent by construction — precisely the profile that failure mode wears. So the engine **refuses to certify on consistency**: above 0.95 test–retest it demands the leniency bias be strictly under the ceiling, fewer than three runs cannot pass at all, and three *identical* runs are flagged as measuring nothing.
 
@@ -360,7 +362,7 @@ The model never does calendar math; this does:
 | `focus on\|off\|status` | toggle the ADHD Focus profile (Sprint default, growth every review, always-on amnesty) |
 | `visuals eager\|threshold\|off\|status` | the explorables dial: every high-affordance concept · portal concepts only (default) · none |
 | `artifact set\|clear\|list` | register a built explorable on its node (validated; powers regeneration tracking + the medium comparison) |
-| **`gold`** | the 86-item adversarial gold set, **answers stripped by construction** — shaped exactly like a real settle payload, so the audit grades the real assessor |
+| **`gold`** | the 89-item adversarial gold set, **answers stripped by construction** — shaped exactly like a real settle payload, so the audit grades the real assessor |
 | **`assessor-audit --file F`** | **grade the grader.** QWK (headline) · raw agreement (never quoted alone) · signed leniency bias · test–retest · confusion matrix · per-case-type breakdown |
 | **`adjudication-stats --file F`** | score an **external human's** adjudication of the gold set: anchor calibration gate, QWK, ordinal Krippendorff's α with a bootstrap CI, signed direction — thresholds fixed in advance ([docs/ADJUDICATION.md](docs/ADJUDICATION.md)) |
 | **`grader-health [--grader-context S]`** | the latest audit's verdict — **and it EXPIRES** (v1.4): a grader swap voids the badge, because a swapped model grades measurably more lenient. `stats` embeds it, and stamps `grader_unvalidated` on every retention figure until it passes |
@@ -370,7 +372,7 @@ The model never does calendar math; this does:
 | **`refit`** | fit the schedule to your measured memory: the interval multiplier (≥50 reviews), then **your own FSRS parameters** — S0 at 64 usable reviews, the full vector at 400, and **a fit that does not beat your current one is refused** |
 | **`export [--topic T]`** | a **text-stripped**, **attributed** receipt bundle written **to a file**. Whitelist-constructed — there is no code path by which a production could leave. **Refuses** if your grader is unaudited |
 | `session-start` / `log-session` | ambient nudge (hook) · session telemetry |
-| `selftest` | 302 checks over the FSRS math, state machine, adherence/retention arithmetic, the grader-audit statistics, and every hardened boundary |
+| `selftest` | 315 checks over the FSRS math, state machine, adherence/retention arithmetic, the grader-audit statistics, and every hardened boundary |
 
 </details>
 

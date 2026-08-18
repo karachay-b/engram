@@ -10,10 +10,11 @@ implementation detail — it is the thing that makes the receipts worth anything
 | `engram-artifact-smith` | build an interactive explorable | long, tool-heavy work that shouldn't block the beats |
 
 On Claude Code, Codex, OpenCode, and Antigravity these are registered agents and
-"spawn X" is literal. **OpenClaw and Pi register none of them** — OpenClaw reads
-Engram as a Codex bundle, and bundles map skills only; Pi ships no subagent
-mechanism at all, by design. On both you construct the same isolation yourself,
-from the platform's shape below.
+"spawn X" is literal. **OpenClaw, Pi, and DeepSeek Harness register none of
+them** — OpenClaw reads Engram as a Codex bundle, and bundles map skills only;
+Pi ships no subagent mechanism at all, by design; DeepSeek Harness has subagent
+tools but no registration of external agent definitions. On all three you
+construct the same isolation yourself, from the platform's shape below.
 
 ## The OpenClaw shape
 
@@ -114,3 +115,20 @@ task text. The child uses the learner's configured default pi model; pass
   stop and say so — do not grade inline. Either way, without the spawn there
   is no blind grader, and Engram has no degraded mode where the tutor grades
   its own learner.
+
+## The DeepSeek Harness shape
+
+dsh registers TWO delegation tools by default, and the choice is load-bearing:
+
+- **`subagent`** (spawn provider) — a fresh-context child that "does not see this
+  conversation". **The only one you may use.**
+- **`subagent_fork`** — seeds the child with every completed turn of THIS
+  conversation. **Never use it for engram agents**: a forked assessor has read
+  the tutoring dialogue, and a grader that saw the lesson is not blind — the
+  receipt it writes looks valid and is worthless.
+
+Neither tool knows engram's agent definitions. Construct the child like the
+OpenClaw shape: instruct it to `Read <ENGRAM_ROOT>/agents/engram-assessor.md`
+(resolve `<ENGRAM_ROOT>` with the same waterfall the skills run — on dsh that
+lands at `~/.agents/engram`) `and follow it exactly`, and pass work items by
+file path, never by pasting stash contents into the task text.

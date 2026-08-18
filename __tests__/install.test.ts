@@ -146,6 +146,12 @@ describe("selfExtract — engram-update is never written to disk", () => {
     const target = resolve(tmp, ".opencode")
     mkdirSync(target, { recursive: true })
     writeFileSync(resolve(target, ".engram-version.jsonc"), JSON.stringify({ version: "0.9.0" }))
+    // A genuinely differing preserved file — the manifest is only written when
+    // something actually differs. (This test previously relied on the agents
+    // category ALWAYS differing because extraction transforms the copies; that
+    // was the spurious-preserved bug, fixed by the transform-aware compare.)
+    mkdirSync(resolve(target, "scripts"), { recursive: true })
+    writeFileSync(resolve(target, "scripts", "engram.py"), "user-modified engine")
 
     selfExtract(pkg, tmp, "1.0.2")
     expect(existsSync(resolve(target, ".engram-update.jsonc"))).toBe(true)

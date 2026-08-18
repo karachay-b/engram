@@ -241,7 +241,7 @@ and uncapped behavior is untouched.
 > (1) the canary must be **quota-stratified across all three bands** — the specified
 > "oversample partial" produced a 100% mid-band set, structurally blind to a grader
 > failing the clear cases; (2) `_latest_audit` must **skip canary files**, or running a
-> canary replaces an 86-item verdict with a 15-item one and `canary-pass` reads as
+> canary replaces a full-set verdict with a 15-item one and `canary-pass` reads as
 > `unreadable`, voiding a good badge; (3) `export` needed its **own** `--grader-context`
 > to inherit staleness — the gate it most needs to be behind.
 
@@ -363,7 +363,7 @@ matrices · v1.2.2 states (no audit receipts, no contexts) behave identically ev
 
 The staleness teeth can flip long-time users to `grader_unvalidated` on the day they
 upgrade their platform — which is **correct** and will feel like a regression. The
-mitigation is the canary: a ~15-item single pass instead of the full 86×3 ceremony,
+mitigation is the canary: a ~15-item single pass instead of the full-set ×3 ceremony,
 offered automatically, and the `read` says *why* ("the model that earned this badge is
 not the model grading you today"). The risk section of docs/10 v0.7 applies verbatim: publish
 whatever it says.

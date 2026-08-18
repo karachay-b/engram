@@ -23,6 +23,10 @@
  *   agents/   → merged + transformed (custom tools string → YAML objects,
  *              mode: subagent, hidden: true injected)
  *   scripts/  → merged (engram.py)
+ *   gold/     → merged (bundled assessor ground truth — engine reads it from
+ *              _plugin_root(), issue #20)
+ *   experiments/ → merged (pre-registered presets — same root)
+ *   docs/     → merged (cited by the extracted skills)
  *
  * Generated (always overwritten on extract):
  *   command/  → command/{learn,review-loop,coach}.md
@@ -77,7 +81,8 @@
  * -------------------------
  *
  * On version bump, selfExtract writes .engram-update.jsonc with a per-category
- * diff (skills, agents, scripts, commands — files added vs preserved).
+ * diff (skills, agents, scripts, commands, gold, experiments, docs — files
+ * added vs preserved).
  *
  * Notification (session-start.ts):
  *   system.transform — injects "Updates Engram Available!" + "Run
@@ -153,7 +158,6 @@
  * What was deliberately removed
  * -----------------------------
  *
- *   docs/ from extract        → end users don't need internal docs.
  *   cfg.references            → all paths local; AGENTS.md covers it.
  *   cfg.permission            → no external paths remain post-extract.
  *   cfg.{skills,commands,agents} → disk discovery (bridge on first exec).
@@ -176,7 +180,7 @@ import { createSessionStartHooks } from "../hooks/session-start.js"
 import { createShellEnvHook } from "../hooks/shell-env.js"
 import { selfExtract, getVERSION, syncProjectState } from "./install.js"
 import { createPluginLogger } from "./logger.js"
-import { engramUpdateTool } from "./update-tool.js"
+import { UPDATE_DESCRIPTION, UPDATE_TEMPLATE } from "./update-command.js"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -210,117 +214,15 @@ Arguments: $ARGUMENTS`,
   },
 }
 
-const UPDATE_DESCRIPTION =
-  "Review and apply pending Engram plugin updates — auto (all) or manual (per file)"
-
-const UPDATE_TEMPLATE = `# /engram-update — apply Engram plugin updates
-
-## Procedure — execute in order; do NOT skip, reorder, or merge steps
-
-### STEP 1 — Read manifest
-Tool: Read
-Path: $TARGET/.engram-update.jsonc
-
-The Engram system consists of:
-  AGENTS.md         — model behavioral rules (project root or global)
-  skills/            — skill definitions (learn, review, coach)
-  agents/            — subagent definitions (curriculum-architect, engram-assessor, artifact-smith)
-  scripts/           — deterministic engine (engram.py)
-  command/           — command templates (learn, review-loop, coach)
-
-Parse the JSON. Locate field: state.
-
-### STEP 2 — If Read fails
-Condition: file not found OR JSON.parse fails.
-Then execute:
-  Call tool: engram_update({ target: "$TARGET", mode: "cleanup" })
-Output the tool's return message. Do NOT modify or paraphrase it.
-STOP. Do not continue.
-
-### STEP 3 — Route by manifest.state
-  "pending"      → go to STEP 4.
-  "in_progress"  → go to STEP 5.
-  any other      → treat as corrupt → go to STEP 2.
-
-### STEP 4 — State "pending": present choices
-Output: "Engram {manifest.from} → {manifest.to}"
-For each category in manifest.categories, output:
-  "{name}: {added.length} added, {skipped.length} preserved"
-Use the question tool:
-  header: "Engram Update"
-  question: "How to apply Engram {manifest.from} → {manifest.to}?"
-  options:
-    - "Auto (Recommended)" — refresh ALL preserved files
-    - "Manual" — pick per file
-    - "View changes" — inspect diff before deciding
-    - "Skip" — defer, remind next session
-    - "Keep as-is" — skip permanently
-Route by selected option:
-  "Auto" → STEP 4a
-  "Manual" → STEP 4b
-  "View changes" → STEP 4e
-  "Skip" → STEP 4c
-  "Keep as-is" → STEP 4d
-
-### STEP 4a — Auto mode
-Call tool: engram_update({ target: "$TARGET", mode: "auto" })
-Output the tool's return message. Do NOT modify or paraphrase it.
-STOP.
-
-### STEP 4b — Manual mode (per-file)
-Call tool: engram_update({ target: "$TARGET", mode: "checkpoint" })
-For each category name in manifest.remaining, in order:
-  For each file in manifest.categories.{name}.skipped:
-    Use the question tool:
-      header: "{name}"
-      question: "Overwrite {file}?"
-      options:
-        - "Yes" — delete and refresh on next restart
-        - "No" — keep current version
-    Track the decision: { file: "{file}", action: "delete" or "keep" }
-After ALL files in all remaining categories have been answered:
-  Call tool: engram_update({ target: "$TARGET", mode: "per_file", decisions: [ALL_TRACKED_DECISIONS] })
-  Output the tool's return message. Do NOT modify or paraphrase it.
-  If the message says remaining is empty → "Manual update complete. Restart or reload."
-  If the message says checkpoint saved → "Checkpoint saved. Continue with /engram-update on next session."
-STOP.
-
-### STEP 4c — Skip
-Call tool: engram_update({ target: "$TARGET", mode: "skip" })
-Output: "Update deferred. You'll be reminded next session."
-STOP.
-
-### STEP 4d — Keep as-is
-Call tool: engram_update({ target: "$TARGET", mode: "keep_as_is" })
-Output the tool's return message. Do NOT modify or paraphrase it.
-STOP.
-
-### STEP 4e — View changes
-// Edge case: .engram-update.diff may not exist even when the manifest
-// does — contentsMatch flags CRLF-only byte differences but diffLines
-// normalizes them away. The Read guard below handles this gracefully.
-Use Read tool: $TARGET/.engram-update.diff
-If Read tool fails (file does not exist): say "No diff available — files may differ only in line endings. Proceed with the update options." Then go back to STEP 4.
-Otherwise: summarize the changes to the user (which files changed and what the diffs show).
-Then go back to STEP 4 and present the options again.
-
-### STEP 5 — State "in_progress": resume
-Output: "Resuming update — checkpoint found."
-Call tool: engram_update({ target: "$TARGET", mode: "skip" })
-This returns current state. Proceed with STEP 4b using only files still present in manifest.categories.{name}.skipped arrays.
-If all skipped arrays are empty:
-  Call tool: engram_update({ target: "$TARGET", mode: "keep_as_is" })
-STOP.
-
-## Constraints — MUST follow
-- Use Read tool for the manifest. NEVER use Glob.
-- Do NOT use Bash for file deletion or manifest updates. Use the engram_update tool instead.
-- Do NOT delete AGENTS.md or scripts/engram.py directly.
-- Do NOT add, modify, or rename any file.
-- If a category.skipped array is empty, skip that category silently.
-- Do NOT output text beyond what each step prescribes.`
-
 export const server: Plugin = async ({ client, $, directory }) => {
+  // Loaded here, NOT at module top: update-tool.ts value-imports
+  // @opencode-ai/plugin (and calls tool() at module scope), and this module
+  // sits in the combined entry's static graph. A static import links the V1
+  // SDK into the V2 load path, where the specifier may be absent or its root
+  // export reshuffled (it has moved once already) — an ESM link error there
+  // kills the plugin before any try/catch runs. server() only ever executes
+  // under V1, the runtime that ships the SDK.
+  const { engramUpdateTool } = await import("./update-tool.js")
   const cwd = directory || process.cwd()
   const sessionStartHooks = createSessionStartHooks($, root, client)
   const shellEnvHooks = createShellEnvHook(root)

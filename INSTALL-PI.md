@@ -78,7 +78,7 @@ Each spawned child bills as a normal `pi -p` run against your configured default
 
 ```bash
 python3 ~/.pi/agent/git/github.com/nagisanzenin/engram/scripts/engram.py selftest
-                                    # 302/302 — same engine everywhere
+                                    # 307/307 — same engine everywhere
 pi config                           # engram listed, with skills/extension/prompts enabled
 pi                                  # then type /  — learn, review, coach in the picker
 ```
@@ -87,7 +87,7 @@ pi                                  # then type /  — learn, review, coach in t
 
 **Verified on pi 0.83.0 and pi 0.74.2** (Linux; 20/20 harness checks on each). The method: a mock OpenAI-compatible provider (`models.json` + a local server), so every payload pi was about to send a model could be captured and inspected, plus RPC mode for the interactive-equivalent paths. Every claim below is either one of the 20 checks or is labeled as a separate observation.
 
-*Packaging* — `pi install` of this repo; manifest-driven discovery of exactly three skills (`learn`, `review`, `coach` — `_shared/` correctly ignored), the extension, and the three prompt templates. (`engram.py selftest` — 302/302, unchanged by this release — is run alongside the harness, not one of its checks.)
+*Packaging* — `pi install` of this repo; manifest-driven discovery of exactly three skills (`learn`, `review`, `coach` — `_shared/` correctly ignored), the extension, and the three prompt templates. (`engram.py selftest` — 302/302 **at v1.11.0**, unchanged by the Pi port — is run alongside the harness, not one of its checks.)
 
 *Skills* — all three present in the captured system prompt in Agent Skills XML form (`<available_skills>` asserted), with correct absolute paths into the installed package.
 

@@ -20,12 +20,18 @@ engram/
 ├── .codex-plugin/plugin.json           # Codex plugin manifest
 ├── opencode.jsonc                      # OpenCode plugin config
 ├── package.json                        # OpenCode npm plugin manifest
-├── .opencode/                          # OpenCode plugin entry point + modules
-│   ├── index.ts                        # entry point: config, hooks, skills, agents, commands, references
-│   ├── agents.ts                       # register hidden subagents from agents/*.md
-│   ├── commands.ts                     # register /learn, /review-loop, /coach
-│   ├── references.ts                   # register engram-{shared,docs,scripts}
-│   ├── install-type.ts                 # detect npm vs local install
+├── .opencode-plugin/                   # OpenCode plugin source (both entry points)
+│   ├── index.ts                        # V1 entry point: config hook, bridge, hooks
+│   ├── v2.ts                           # OpenCode 2.0 entry point ({ id, setup }) — same engine, V2 hook surface
+│   ├── install.ts                      # selfExtract engine: copyMissing, AGENTS.md block, git filter, commands
+│   ├── update.ts                       # update manifest state machine (.engram-update.jsonc)
+│   ├── update-core.ts                  # engram_update logic, host-agnostic (shared by both entries)
+│   ├── update-command.ts               # /engram-update template constants (shared by both entries)
+│   ├── update-tool.ts                  # V1 wrapper binding update-core to the V1 tool() API
+│   ├── diff.ts                         # unified diff generator for /engram-update "view changes"
+│   ├── agents.ts                       # register hidden subagents from agents/*.md (V1 bridge)
+│   ├── claude-warning.ts               # CLAUDE.md vs AGENTS.md collision warning
+│   ├── logger.ts                       # V1 client logger (server log + warning toasts)
 │   └── parse-frontmatter.ts            # shared markdown frontmatter parser
 ├── skills/
 │   ├── learn/SKILL.md                  # /learn — acquire (diagnose→derive→verify→schedule)

@@ -2,7 +2,7 @@
 
 Since v0.7 this repository has said, on every audit it prints, that its gold set is
 **authored, not independently human-adjudicated**, and that getting *one human who is not
-the author* through the 86 items is **the highest-value contribution anyone could make
+the author* through the 89 items is **the highest-value contribution anyone could make
 here**. This document is the procedure that makes that work countable, and
 `engram.py adjudication-stats` is the procedure in code.
 
@@ -18,7 +18,7 @@ harder. It goes away when someone else reads the items.
 
 ## What you are being asked to do
 
-Read up to 86 short learner answers. For each one, decide the grade an exam grader would
+Read up to 89 short learner answers. For each one, decide the grade an exam grader would
 give it against the stated rubric:
 
 | grade | when |
@@ -85,7 +85,7 @@ The engine computes, over your non-anchor items only:
   agreement by 34–41 points in the measured literature)
 - **QWK** — quadratic weighted kappa against the authored gold
 - **Krippendorff's α (ordinal)** with a bootstrap 95% CI — the statistic an outside reader
-  of this repo will expect, published *with its spread*, because a point estimate from 86
+  of this repo will expect, published *with its spread*, because a point estimate from ~90
   items quoted without its interval is a label lying about its own precision
 - **direction** — how often you were *stricter* than the author vs *more lenient*, because
   a mean near zero is also what "disagrees in both directions" looks like

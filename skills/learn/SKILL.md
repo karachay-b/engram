@@ -12,14 +12,16 @@ You are the **tutor**. Your discipline lives in `skills/_shared/dialogue-grammar
 # Resolve the engine. RUN THIS BLOCK VERBATIM — do not substitute a path you guessed.
 # Order: plugin root on OpenCode / Claude Code / Codex, dev clone (ENGRAM_ROOT —
 # Pi's extension exports this), OpenClaw's extension dir, the Antigravity staging
-# path, then Pi's git-install path (a pure fallback: live Pi sessions resolve via
-# ENGRAM_ROOT above, so this entry never shadows another platform's install).
-# First one that exists wins.
+# path, Pi's git-install path, the working tree ($PWD / git toplevel — a
+# contributor's checkout must beat any stale clone), and LAST the shared agent
+# home (~/.agents/engram — the clone route for platforms that read ~/.agents,
+# e.g. DeepSeek Harness; last so it can shadow nothing). First one that exists wins.
 for d in "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
          "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/extensions/engram" \
          "$HOME/.gemini/config/plugins/engram" \
          "$HOME/.pi/agent/git/github.com/nagisanzenin/engram" \
-         "$PWD" "$(git rev-parse --show-toplevel 2>/dev/null)"; do
+         "$PWD" "$(git rev-parse --show-toplevel 2>/dev/null)" \
+         "$HOME/.agents/engram"; do
   [ -n "$d" ] && [ -f "$d/scripts/engram.py" ] && ENGRAM="$d/scripts/engram.py" && break
 done
 if [ -z "$ENGRAM" ]; then
@@ -103,7 +105,7 @@ python3 "$ENGRAM" experiment assign --topic <topic> --node <id>   # if one is ac
 
 `assign` is idempotent and returns the node's `arm` (or `{"arm": null}` when no experiment is running). **An arm never moves under a node**, so calling it again later is safe — and it is the only way to know which arm this node belongs to.
 
-Run the **dialogue grammar** beats 1–8 on the returned node (gap → predict → struggle → resolve → self-explain → connect → verify → close), with a one-line progress marker between nodes (`node 2/3 · residual-stream †`). Scaffolding dial: pretest miss or shaky `requires` → concrete-first; otherwise derivation-first per `strategy_weights`. `arbitrary: true` → mnemonic + retrieval, no derivation theater.
+Run the **dialogue grammar** beats 1–8 on the returned node (gap → predict → struggle → resolve → self-explain → connect → verify → close), with a one-line progress marker between nodes (`node 2/3 · residual-stream †`). Scaffolding dial: pretest miss or shaky `requires` → concrete-first; otherwise derivation-first per `strategy_weights`. `arbitrary: true` → mnemonic + retrieval, no derivation theater. **If the node carries an authored `contrast` set** (the `next` payload includes it), check the grammar's contrast-first gate (P18 blockquote — all four conditions, novice gate wins, never in Sprint): pass → beat 2 becomes the contrast-first opening and RESOLVE quotes their attempts; fail → ordinary beats, and the case set is still good RESOLVE material. If a `contrast_first` experiment is active, the node's **arm** decides instead of the default weighting — same gates still bind (a gate is a safety rule, not a strategy).
 
 **If the node carries `kind: "procedure"`** (a skill executed on instances — declared by the architect, any domain): Read `skills/_shared/problem-grammar.md` and run its **ladder** in place of beats 2–4 — worked example → completion → faded → cold solve, rung from the same scaffolding signals — and VERIFY becomes a fresh-instance solve (answer key computed by execution, never inspection). Beats 1 and 5–8, confidence integrity, and the stash flow are unchanged; the stash entry's `rubric` is the node's step rubric as authored. Concept and fact nodes: nothing changes.
 
@@ -121,6 +123,9 @@ python3 "$ENGRAM" stash add --file <tmpfile.json>
 # capability claim silently never gets measured.
 # On a procedure node, add "node_kind":"procedure" (and the probe is the fresh
 # instance you served) — it tells the assessor to step-grade and classify errors.
+# If CONNECT elicited an analogy alignment (P19), add "alignment":"<their sentence,
+# verbatim>" — the assessor returns alignment_quality 0/1/2, recorded on the receipt;
+# it never moves the grade.
 # The engine mints a `sid` on every stash entry. It MUST survive the round-trip to the
 # receipt (see step 4) — it is what makes the settle idempotent (issue #3).
 ```

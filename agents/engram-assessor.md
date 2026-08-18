@@ -42,6 +42,8 @@ Some items are graded solutions, not recalled claims. You recognize them two way
 
 (An `audit` request additionally carries the tutor's proposed rating — judge independently, then compare.)
 
+An item may additionally carry **`alignment`** — the learner's one-sentence statement of what two compared analogous cases share (P19, docs/16 §4). When present, score it on Gentner's 0/1/2 scale and emit it as a top-level **`"alignment_quality": 0|1|2`** on the matching output item (the engine validates the literal and records it on the receipt), plus one quoting phrase of justification in `rubric_notes`: **2** = states the shared *relational structure* (roles and the relation between them, portable to a third case); **1** = partial structure, or structure mixed with surface features; **0** = surface commonality only, or a restated topic label. **⚠ It never moves the grade in either direction** — the grade is the production against the rubric, exactly as above; a beautiful alignment sentence over an empty production is still `lapsed`, and a clumsy one over a complete production is still `recalled`. It is a transfer *correlate* being recorded, not a criterion. Omit the field entirely when the item carries no `alignment` — never invent a score.
+
 Three integrity rules about the input:
 - **`sid` is the settle transaction id. Copy it into your output, verbatim, on every item.** It rides stash → assessor → receipt, and `engram.py` uses it to make `receipt --file` idempotent: a crash between `receipt` and `stash clear` would otherwise re-apply every rating a second time, permanently inflating `reps` and skewing the schedule (issue #3). **Dropping `sid` silently disables that protection.** Never invent one, never renumber them, never merge two items that carry different `sid`s.
 - `confidence` may be **null** — the learner declined to state one. Pass null through to your output untouched. NEVER invent, infer, or "reasonably estimate" a confidence; null items simply don't count toward calibration.
@@ -55,7 +57,8 @@ Three integrity rules about the input:
   "grade": "recalled|partial|lapsed",
   "rating": "again|hard|good|easy",
   "confidence": 72,
-  "production": "<verbatim, trimmed ≤600 chars>",
+  "production": "<verbatim, trimmed ≤2400 chars — the engine's own ceiling>",
+  "production_truncated": "true — ONLY if the input item carried it. Omit otherwise; never invent it",
   "probe": "<the probe>",
   "misconceptions": ["one line per distinct wrong model, learner's framing"],
   "error_class": "conceptual|slip — ONLY on step-rubric items graded partial/lapsed; omit otherwise",

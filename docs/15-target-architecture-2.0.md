@@ -224,7 +224,7 @@ drop-in for the same skill flow).
    `partial` — a canary that cannot see a grader failing the clear cases is a narrower
    badge, not a tripwire.
 2. **`_latest_audit` skips canary-scoped files.** Otherwise a canary becomes "the latest
-   audit", replacing an 86-item verdict with a 15-item one, and `canary-pass` — correctly
+   audit", replacing a full-set verdict with a 15-item one, and `canary-pass` — correctly
    not a valid *full* verdict — reads as `unreadable` and voids a healthy badge.
 3. **The canary needs its own `min_n`.** Held to the full audit's floor it would always
    read `insufficient-data`, i.e. dead code shipped as a feature (bug class #3).
