@@ -1,8 +1,14 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Engram — Cloud-Setup (Claude Code im Web)
 
 Dieses Repo ist ein Fork von [nagisanzenin/engram](https://github.com/nagisanzenin/engram),
 zusätzlich verdrahtet für die Nutzung in Claude Code on the web. Alles unter `.claude/`
 und diese Datei gehören zum Cloud-Setup; alles andere ist unveränderter Upstream-Code.
+Das folgende Kapitel „Upstream-Codebase" beschreibt diesen unveränderten Teil — die
+eigentliche Lern-Engine hinter den drei Kommandos.
 
 ## Die drei Kommandos
 
@@ -239,6 +245,68 @@ das den gemeinsamen Ort erst findet. Upstream duplizert seinen eigenen Resolver 
 demselben Grund über `skills/{learn,review,coach}/SKILL.md`. Wer den Block ändert,
 ändert ihn viermal.
 
+## Upstream-Codebase: die Lern-Engine
+
+Der Teil des Repos, den der Fork nicht anfasst. Engram ist ein Multi-Platform-Plugin
+(Claude Code, OpenAI Codex, OpenCode v1/2.0, Hermes, Antigravity, OpenClaw, Pi, DSH) —
+`.claude-plugin/`, `.codex-plugin/`, `.opencode-plugin/`, `dsh/`, `pi/` sind je ein
+Adapter auf denselben drei Kommandos und denselben Zustand. In dieser Umgebung zählt
+nur der Claude-Code-Pfad.
+
+### Architektur in einem Satz
+
+Deterministischer Python-Kern (`scripts/engram.py`, stdlib-only, FSRS-4.5-Scheduler +
+State-Machine + Receipts) unter drei Markdown-Skills (`skills/{learn,review,coach}/`),
+die die eigentliche Tutor-Konversation im Hauptkontext führen; drei Subagents
+(`agents/engram-{curriculum-architect,assessor,artifact-smith}.md`) übernehmen genau
+die Schritte, die frischen/blinden Kontext brauchen. Details, Diagramme und die
+Design-Begründung stehen in `docs/03-architecture.md` (Pflichtlektüre vor Änderungen
+an Skills, Agents oder dem State-Schema) — hier nur, was zum Navigieren reicht:
+
+- **Der Tutor ist kein Subagent.** `/learn`- und `/review`-Dialoge laufen im Hauptchat
+  unter der Dialog-Grammatik aus `skills/_shared/dialogue-grammar.md`, weil die
+  Lernbeziehung Kontext über die Session hinweg braucht.
+- **Grading ist getrennte Gewalt.** Bei Erstbegegnung (Encoding in `/learn`) grade nie
+  der Tutor selbst — die Produktion geht blind an `engram-assessor`, der nur Item,
+  Rubrik und die Worte des Lernenden sieht, nie den Dialog. Bei `/review` grade der
+  Tutor selbst (Zwei-Minuten-Budget verträgt keinen Subagent-Umweg), mit Stichproben-Audit.
+- **Zustand ist reiner JSON-Dateibaum**, global unter `~/.claude/learning/` (in diesem
+  Fork umgeleitet nach `<engram-learning-checkout>/learning`, siehe oben):
+  `learner-model.json` (offenes Lernermodell), `graphs/<topic>.json` (Konzept-DAG mit
+  FSRS-State pro Node), `receipts/<topic>.jsonl` (append-only Prüfnachweise),
+  `misconceptions.json`, `sessions.jsonl`, `experiments.json`.
+- **`scripts/engram.py`** (~12.900 Zeilen, eine Datei, keine Dependencies) ist die
+  einzige Stelle, die den State-Baum anfasst — FSRS-Mathematik, Schema-Migration und
+  Validierung laufen als Code, nie als LLM-Arithmetik. Wichtigste Subcommands:
+  `add-topic`, `next`, `due`, `rate`, `stash`, `receipt`, `model`, `artifact`,
+  `experiment`, `stats`, `report`, `doctor`, `refit`, `capstone`, `transfer`,
+  `assessor-audit`, `selftest`. `python3 scripts/engram.py <cmd> --help` für Details;
+  `doctor` zuerst bei jeder State-Anomalie.
+
+### Lernertext geht nie auf die Kommandozeile
+
+Gilt für **jeden** Aufruf von `engram.py`, nicht nur für den Cloud-Fork (siehe
+„Sicherheitsregel" oben): Freitext immer per `--file`/`--json -`/`--production-file -`,
+nie als Shell-Argument.
+
+### Wichtige Dateien zum Navigieren
+
+| Pfad | Rolle |
+|---|---|
+| `scripts/engram.py` | deterministischer Kern: FSRS, State, Receipts, Stats, `selftest` |
+| `skills/learn\|review\|coach/SKILL.md` | die drei Tutor-Skills (Upstream, unangetastet) |
+| `skills/_shared/dialogue-grammar.md` | Dialog-Regeln des Tutors (predict→attempt→hint→resolve→self-explain→connect) |
+| `skills/_shared/explorable-contract.md` | Pflicht-Spec für generierte HTML-Explorables |
+| `skills/_shared/problem-grammar.md`, `subagents.md` | weitere gemeinsame Bausteine |
+| `agents/engram-curriculum-architect.md` | Thema → Konzept-DAG (typisierte Kanten) |
+| `agents/engram-assessor.md` | blinder Grader, rubrikgebunden, schreibt Receipts |
+| `agents/engram-artifact-smith.md` | baut Explorables unter dem Explorable Contract |
+| `hooks/session-start.{sh,ts}` | Re-Anchoring: Due-Count-Nudge beim Sessionstart |
+| `.opencode-plugin/` | OpenCode-Adapter (V1 + 2.0), TypeScript, hier getestet |
+| `docs/03-architecture.md` | die Design-Referenz — vor jeder strukturellen Änderung lesen |
+| `docs/06-visual-encoding.md` | wann/wie Explorables gebaut werden (Visuals-Dial) |
+| `gold/assessor-gold.jsonl` | Gold-Set für `assessor-audit` / Grader-Kalibrierung |
+
 ## Tests
 
 Wie CI (`.github/workflows/test.yml`):
@@ -247,6 +315,19 @@ Wie CI (`.github/workflows/test.yml`):
 bun install && bun run test && npx tsc --noEmit
 python3 scripts/engram.py selftest
 ```
+
+`bun run test` führt `vitest run` über `__tests__/*.test.ts` aus (Tests für die
+`.opencode-plugin/`-Adapter — Install/Update-Logik, Diff, Frontmatter-Parser,
+Session-Start, Skills-Waterfall). Einzelne Datei oder einzelner Test:
+
+```bash
+npx vitest run __tests__/update.test.ts
+npx vitest run -t "some test name"
+```
+
+`python3 scripts/engram.py selftest` ist der Test der eigentlichen Engine (FSRS-Mathe,
+State-Übergänge, Schema-Migration) — ein einzelnes Modul lässt sich nicht isoliert
+laufen lassen, `selftest` deckt den Kern komplett ab und meldet `N/N`.
 
 Dazu der Selftest des Quellen-Werkzeugs — er prüft die `kind`-Heuristik gegen
 Fixtures, die aus echtem Material gezogen sind:
