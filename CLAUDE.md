@@ -60,6 +60,13 @@ Deshalb darf sich nichts darauf verlassen, dass ein Hook gelaufen ist:
 
 - Der Bootstrap-Block der Alias-Skills setzt `ENGRAM_HOME` selbst und exportiert
   zusätzlich `ENGRAM_ROOT`, worauf der unveränderte Upstream-Resolver anspringt.
+  Läuft der SessionStart-Hook, publiziert er `ENGRAM_ROOT` seinerseits über
+  `$CLAUDE_ENV_FILE` (neben `ENGRAM_HOME` und `ENGRAM_HOOKS_ACTIVE`) — dann greift
+  der Upstream-Resolver in **jedem** Bash-Aufruf, nicht nur in dem, der den
+  Bootstrap-Block mitgeführt hat. Das ersetzt den Block nicht: Ein `export` stirbt
+  mit der Shell des Hooks, und ohne Hook gibt es nichts zu publizieren. Ohne beides
+  scheitert der Resolver fail-closed mit `engine not found` — richtig so, denn die
+  Alternative wäre ein stiller Fallback ins flüchtige `~/.claude/learning`.
 - Ob die Hooks registriert sind, erkennt er an `ENGRAM_HOOKS_ACTIVE`. Das setzt
   `session-start.sh` als Allererstes über `$CLAUDE_ENV_FILE`, noch vor jeder
   Auflösung — der Marker sagt also „ein Hook lief", nicht „ein Checkout wurde

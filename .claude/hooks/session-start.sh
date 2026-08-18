@@ -38,6 +38,23 @@ HOOK_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2>/dev/null &&
 . "$HOOK_DIR/engram-env.sh" 2>/dev/null || exit 0
 
 [ -f "$ENGRAM_PROJECT/scripts/engram.py" ] || exit 0
+
+# --- 0a. publish the checkout path ---------------------------------------------
+# engram-env.sh exports ENGRAM_ROOT, but an export dies with this hook's shell.
+# Upstream's own resolver (skills/{learn,review,coach}/SKILL.md) checks
+# $ENGRAM_ROOT as its fourth candidate and, without it, falls through to $PWD and
+# `git rev-parse` — both of which come up empty when the session's working
+# directory is the parent of both checkouts (/home/user). The resolver then fails
+# closed with "engine not found", which is correct but leaves every Bash call
+# depending on the alias bootstrap having run in that same call. Publishing the
+# path here makes the unmodified upstream block resolve on its first real hit in
+# any shell of this session.
+#
+# Published only after the guard above: this is a validated path, not a guess.
+# It is NOT a substitute for ENGRAM_HOOKS_ACTIVE — that marker means "a hook ran"
+# and gates the manual-save warning; this one only says where the engine lives.
+[ -n "${CLAUDE_ENV_FILE:-}" ] && echo "export ENGRAM_ROOT=\"$ENGRAM_PROJECT\"" >> "$CLAUDE_ENV_FILE"
+
 command -v python3 >/dev/null 2>&1 || {
   echo "engram: python3 fehlt — die Engine kann nicht laufen."
   exit 0
