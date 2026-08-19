@@ -71,15 +71,18 @@ export ENGRAM_HERMES
 # diese Datei über ihren Pfad gesourct wird — und Hermes ruft Hooks immer mit
 # absolutem Pfad auf (die Konfiguration verlangt es).
 ENGRAM_PROJECT=""
+# Windows/MSYS-Abweichung: pwd liefert /c/... was `git -C` nicht versteht
+# (exit 128). cygpath -w konvertiert zuverlässig in native Windows-Pfade,
+# mit denen git -C, engram.py und die Hooks problemlos arbeiten.
 for _p in "${ENGRAM_ROOT:-}" \
-          "$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd)" \
+          "$(cygpath -w "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null)" \
           "$PWD" \
           "$(git rev-parse --show-toplevel 2>/dev/null)" \
           "$HOME/engram" \
           "/home/user/engram"; do
   [ -n "$_p" ] || continue
   if [ -f "$_p/scripts/engram.py" ]; then
-    ENGRAM_PROJECT="$(CDPATH= cd -- "$_p" 2>/dev/null && pwd)"
+    ENGRAM_PROJECT="$(cygpath -w "$_p")"
     break
   fi
 done
@@ -108,7 +111,7 @@ for _c in "${ENGRAM_STATE_REPO:-}" \
           "/home/user/engram-learning"; do
   [ -n "$_c" ] || continue
   if [ -d "$_c/.git" ]; then
-    ENGRAM_STATE="$(CDPATH= cd -- "$_c" 2>/dev/null && pwd)"
+    ENGRAM_STATE="$(cygpath -w "$_c")"
     break
   fi
 done

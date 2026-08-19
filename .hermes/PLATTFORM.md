@@ -142,4 +142,89 @@ Damit die Liste oben nicht als Freibrief gelesen wird — unverändert gültig s
 - der **Recherche-Baustein** mit Budget (6 Aufrufe) und den Belegstufen A/B,
 - die **Dialog-Grammatik** und die Trennung der Gewalten beim Bewerten,
 - **Quellen-Derivate bleiben privat** — nichts davon in den öffentlichen Fork,
-- **Pfade nie raten** — der echte Pfad steht in `engram.py doctor`, Feld `home`.
+| **Pfade nie raten** — der echte Pfad steht in `engram.py doctor`, Feld `home`.
+
+## 7 · Windows-Spezifika (gemessen am 2026-08-20)
+
+Diese Host-Eigenheiten sind keine Hermes-Abweichungen — sie betreffen jede
+Git-Bash-Umgebung auf Windows (MSYS2 / Git for Windows), in der Engram-Hooks
+laufen. Sie stehen hier, nicht in `.claude/PLATTFORM.md`, weil Claude Code in
+der Cloud auf Linux-Containern läuft und sie dort nie trifft. **Wer das Setup
+auf einer anderen Windows-Maschine wiederholt, sollte diese drei Punkte zuerst
+lesen** — sie sind genau das, was eine scheinbar korrekte Verdrahtung in
+„funktioniert, schreibt aber nichts" verwandelt.
+
+### 7.1 · `python3` zeigt auf den Microsoft-Store-Hinweis
+
+Auf diesem Host zeigt der `python3`-Stub in
+`/c/Users/.../WindowsApps/python3` auf den Store-Hinweis statt auf eine echte
+Installation. Jeder `python3`-Aufruf aus einem Hook (und davon gibt es viele)
+scheitert mit Exit 49, und die Hook-Skripte fallen auf ihren `|| exit 0`-Pfad
+mit `{}` auf stdout zurück — **lautloser No-Op**.
+
+`python` (ohne die 3) ist die echte Installation unter
+`C:/Python311/python.exe` und funktioniert.
+
+**Workaround:** Ein Wrapper unter `/c/Users/<DU>/bin/python3` (im `PATH` **vor**
+dem WindowsApps-Stub), der die echte Python-Installation aufruft. Der genaue
+Pfad ist egal — `py -3` löst ihn auf diesem Host zu `C:\Python313\python.exe`
+auf, auf anderen Maschinen zu `C:\Python311\python.exe` oder
+`%LOCALAPPDATA%\Programs\Python\Python312\python.exe`:
+
+```bash
+_py="$(py -3 -c 'import sys; print(sys.executable)' 2>/dev/null \
+      || echo 'C:/Python311/python.exe')"
+cat > /c/Users/<DU>/bin/python3 <<SH
+#!/usr/bin/env bash
+exec "$_py" "\$@"
+SH
+chmod +x /c/Users/<DU>/bin/python3
+```
+
+**Verifikation:** `python3 --version` muss eine echte Python-Version
+ausgeben, nicht die Microsoft-Store-Meldung. Dann
+`python3 "$ENGRAM_ROOT/scripts/engram.py" selftest` — muss `N/N` bestehen.
+
+### 7.2 · `pwd` liefert MSYS-Pfade, `git -C` versteht sie nicht
+
+In MSYS-Bash normalisiert `cd … && pwd` jeden Pfad nach `/c/Users/...`. `git -C
+/c/Users/...` schlägt aber mit Exit 128 fehl („No such file or directory") —
+`git -C` bekommt keine MSYS-Pfadkonversion. Die Folge: `engram-env.sh` setzt
+`ENGRAM_STATE=/c/Users/...`, jeder `git -C "$ENGRAM_STATE"`-Aufruf im Hook
+scheitert, der State-Sync meldet „kein Git-Repo", `doctor` zeigt einen
+„kein Git-Repo"-Hinweis, und der Auto-Save schreibt nichts.
+
+**Patch in `.hermes/hooks/engram-env.sh`** — zwei Stellen, an denen
+`CDPATH= cd -- "$_x" 2>/dev/null && pwd` steht (Z. 36, 43, 72 in der
+Upstream-Fassung), ersetzen durch `cygpath -w "$_x"`. `cygpath` ist in jeder
+MSYS-Installation vorhanden und konvertiert sowohl `C:/...` als auch `/c/...`
+zuverlässig nach `C:\...`, mit dem `git -C` und `engram.py` problemlos
+arbeiten.
+
+**Bewusst NICHT angefasst:** `.claude/hooks/engram-env.sh` hat denselben Bug
+auf Windows, wird aber von Claude-Code-Cloudsessions gebraucht (die laufen
+unter Linux und sehen den Bug nie). Eine Änderung dort wäre eine
+Cloud-Container-Modifikation und gehört in deren Setup-Pfad.
+
+### 7.3 · Bootstrap zeigt `C:\…\engram-learning/learning`
+
+Aus der Kombination von 7.2 (`cygpath -w` für `ENGRAM_STATE`) und dem
+Resolver-Anhängsel `/learning` entsteht das gemischte Format
+`C:\Users\andre\engram-learning/learning`. Funktional unbedenklich — `engram.py
+doctor` akzeptiert es, `os.path.join` macht daraus überall den gleichen Pfad.
+Wenn es stört, hilft ein `cygpath -w "$ENGRAM_STATE/learning"` direkt vor dem
+`export ENGRAM_HOME`.
+
+### 7.4 · Erkennung: drei Symptome, eine Ursache
+
+Wenn beim ersten `/engram-status` **alle drei** dieser Meldungen gleichzeitig
+auftauchen, ist es 7.1 + 7.2:
+
+1. Bootstrap meldet `ENGRAM_HOME=<leer>` oder „Checkout nicht gefunden" — die
+   Hook-Resolver-Kette ist gescheitert.
+2. `engram.py doctor` zeigt `"home": "/c/Users/..."` statt `"home":
+   "C:\\Users\\..."`, oder `"writable": false`.
+3. Im State-Repo-Log taucht nach einer Lern-Session kein `engram (hermes):`-Commit
+   auf, obwohl die Engine schreiben hätte müssen.
+
+Beheben in dieser Reihenfolge: 7.1 (Wrapper), 7.2 (Patches), 7.3 (kosmetisch).
