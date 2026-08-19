@@ -60,9 +60,52 @@ git --version
 Ist Hermes älter als 0.5.0: erst aktualisieren. Ohne die Lifecycle-Hooks gibt es keinen
 Auto-Save, und das ist genau der Teil, den dieses Setup braucht.
 
-Das Modell kommt über das Nous Portal: `hermes setup --portal` (OAuth, legt die
-Anmeldung selbst ab). Die Mechanik von Engram läuft auf jedem Modell — die **Pädagogik
-ist so gut wie das Modell**. Für `/engram-learn` das fähigste verfügbare wählen.
+### Das Modell
+
+Anmeldung über das Nous Portal: `hermes setup --portal` (OAuth, legt die Anmeldung
+selbst ab). Danach das Modell setzen — für die Einrichtung **und** als Ausgangspunkt
+für den Alltag:
+
+```yaml
+# ~/.hermes/config.yaml
+model:
+  default: "minimax/minimax-m3"
+  provider: "nous"
+```
+
+**Warum M3** (Stand 2026-08; Preise und Ranglisten altern schnell, vor einer
+Neubewertung nachschlagen): 0,30 $/M Input und 1,20 $/M Output bei 1M Kontext — und
+die Benchmarks, die zu *dieser* Aufgabe passen, sind Terminal-Bench (Kommandozeilen-
+Agent, 66,0) und MCP Atlas (Werkzeugaufrufe, 74,2), nicht Prosa-Ranglisten. Die ganze
+Einrichtung kostet damit grob 0,40 $. Zum Vergleich: dasselbe mit Claude Sonnet 4.6
+läge bei etwa 4 $ — bei einer einmaligen Aufgabe ist der Unterschied Rauschen, weshalb
+hier **Zuverlässigkeit** und nicht der Preis den Ausschlag gibt. M3 gewinnt auf beiden
+Achsen.
+
+Stolpert es doch — es meldet Erfolg, ohne die Prüfungen wirklich ausgeführt zu haben —
+dann mitten in der Session `/model anthropic/claude-haiku-4.5` und weiter. Anthropic-
+Modelle sind bei stur abzuarbeitenden Checklisten die konservativere Wahl, und unter
+1,50 $ für den Rest.
+
+**Nicht nehmen:** Nous' eigene Hermes-4-Modelle. Trotz stark rabattierter Preise sagt
+die Portal-Doku ausdrücklich „not recommended for use inside Hermes Agent".
+
+Optional, spart im Dauerbetrieb spürbar — die Kontextkompression auf ein billiges
+Modell auslagern, statt sie mit dem Hauptmodell zu bezahlen:
+
+```yaml
+auxiliary:
+  compression:
+    model: "qwen/qwen3.7-flash"     # 0,03 $/M
+    provider: "nous"
+```
+
+**Ein Vorbehalt für den Alltag danach.** Die Mechanik von Engram läuft auf jedem
+Modell; die **Pädagogik ist so gut wie das Modell**. `/engram-review` ist mechanisch und
+verträgt Sparsamkeit. `/engram-learn` nicht — dort entstehen Kurrikulum, Dialogführung
+und die blinde Bewertung, und ein schwaches Modell erzeugt dort einen Lernpfad, dessen
+Mängel erst Wochen später beim Behalten auffallen. Dafür `/model` mitten in der Session
+nutzen, statt eine Einstellung für beides zu suchen.
 
 ### Klonen — Geschwister-Layout, nicht ineinander
 
