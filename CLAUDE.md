@@ -259,14 +259,51 @@ Alternativ der "Sync fork"-Button auf GitHub. Nach jedem Update den Selftest lau
 lassen — er ist die Gegenprobe, dass die Engine intakt ist.
 
 Ändert Upstream die Namen oder Frontmatter-Beschreibungen der Skills, müssen die
-`description`-Zeilen in `.claude/skills/engram-*/SKILL.md` nachgezogen werden.
+`description`-Zeilen in `.claude/skills/engram-*/SKILL.md` **und**
+`.hermes/skills/engram-*/SKILL.md` nachgezogen werden. Die beiden Sätze sind wortgleich
+zu halten — mit **einer dokumentierten Ausnahme**: `engram-status` verspricht auf Hermes
+keine „geteilte Seite", weil es dort kein Artifact-Publishing gibt. Die Abweichung steht
+in der Datei selbst begründet und ist kein Fehler, der zu „reparieren" wäre.
 
 Zweite bewusste Duplizierung: der **Bootstrap-Block** steht wörtlich in allen fünf
 Alias-/Cloud-Skills (`engram-learn`, `engram-review`, `engram-coach`, `engram-source`,
-`engram-status`). Ein gemeinsamer Ort ginge nicht — der Block ist genau das Stück Code,
-das den gemeinsamen Ort erst findet. Upstream duplizert seinen eigenen Resolver aus
-demselben Grund über `skills/{learn,review,coach}/SKILL.md`. Wer den Block ändert,
-ändert ihn viermal.
+`engram-status`) — und in deren fünf Hermes-Fassungen unter `.hermes/skills/` noch einmal
+in eigener Variante. Ein gemeinsamer Ort ginge nicht: Der Block ist genau das Stück Code,
+das den gemeinsamen Ort erst findet, und die beiden Plattformen finden ihn verschieden
+(Claude Code über `$CLAUDE_PROJECT_DIR` und einen Session-Marker, Hermes über
+`~/.hermes/.env` und eine Marker-Datei). Upstream dupliziert seinen eigenen Resolver aus
+demselben Grund über `skills/{learn,review,coach}/SKILL.md`. Wer den Block ändert, ändert
+ihn zehnmal — fünfmal je Plattform, und die beiden Fassungen sind **nicht** identisch.
+
+Alles andere ist nicht dupliziert: Die Hermes-Skills **lesen** die Regeln aus
+`.claude/skills/engram-*/SKILL.md`, statt sie zu kopieren. Eine Regel ändern heißt
+deshalb weiterhin: an genau einer Stelle ändern.
+
+## Zweite Plattform: Hermes Agent
+
+Dasselbe Setup läuft in der **Hermes Agent Desktop-App** (Nous Research) — gedacht als
+der günstige Alltagsweg, während Claude Code die Arbeit am Setup selbst behält. Die
+Verdrahtung liegt unter `.hermes/`, gebaut nach demselben Prinzip wie `.claude/`: ein
+Verzeichnis, das es upstream nicht gibt, also nie ein Merge-Konflikt.
+
+**Der eine Satz, der zählt: derselbe Lernstand.** Beide Plattformen schreiben nach
+`karachay-b/engram-learning`, Branch `main` — Hermes pullt beim Sessionstart
+(`pre_llm_call`) und pusht nach jedem Turn (`post_llm_call`, das exakte Gegenstück zum
+Stop-Hook hier). Ein FSRS-Kalender, zwei Oberflächen.
+
+- **Einrichtung:** `.hermes/UEBERGABE-HERMES.md` — ein Auftrag, den Hermes selbst
+  abarbeiten kann, mit Prüfungen und erwarteter Ausgabe.
+- **Was auf Hermes anders ist:** `.hermes/PLATTFORM.md` — bindend. `delegate_task` statt
+  registrierter Subagents (die Rollendatei muss als Text in den `context`), Marker-Datei
+  statt `ENGRAM_HOOKS_ACTIVE` (ein Hermes-Hook kann keine Variable in die Agenten-Shell
+  exportieren), kein Artifact-Publishing.
+- **Konflikte im State-Repo werden nicht automatisiert.** `receipts/*.jsonl` wäre als
+  Vereinigung auflösbar, `graphs/*.json` trägt FSRS-State und ist es nicht; eine
+  Automatik über beides wäre eine Maschine für stillen Datenverlust. Die Hooks rollen
+  einen konfliktbehafteten Rebase zurück und melden es.
+
+Upstreams eigener, schlankerer Hermes-Pfad (`INSTALL-HERMES.md`) bleibt gültig und wird
+nicht angefasst — `.hermes/` ergänzt ihn um genau das, was nur dieser Fork hat.
 
 ## Upstream-Codebase: die Lern-Engine
 
@@ -367,7 +404,20 @@ berühren, prüft u. a. die Vertraulichkeitsgrenze (dass `probe`/`claim`/`rubric
 python3 .claude/tools/engram_status.py selftest
 ```
 
-Beide hängen **nicht** in `.github/workflows/test.yml`, und das ist Absicht: Die
+Und die Hermes-Verdrahtung, soweit sie sich ohne Hermes prüfen lässt — Syntax der
+Hooks, gültiges JSON auf stdout, Dedupe-Sperre:
+
+```bash
+bash -n .hermes/hooks/*.sh
+echo '{"session_id":"t"}' | bash .hermes/hooks/session-start.sh | python3 -m json.tool >/dev/null
+echo '{"session_id":"t"}' | bash .hermes/hooks/engram-save.sh   | python3 -m json.tool >/dev/null
+```
+
+Was dabei **nicht** geprüft wird und nur auf einer echten Installation prüfbar ist:
+Skill-Discovery, ob die Hooks feuern, und `delegate_task`. Dafür ist Schritt 4/5 der
+Übergabedatei da.
+
+Alle drei hängen **nicht** in `.github/workflows/test.yml`, und das ist Absicht: Die
 Workflow-Datei ist Upstream-Code, ein Schritt darin wäre der erste Konflikt beim
 nächsten `git merge upstream/main`. Wer die Marker in `engram_source.py` oder
 `engram_status.py` anfasst, ruft den jeweiligen Selftest von Hand auf.
