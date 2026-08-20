@@ -16,7 +16,9 @@
 #   Hook-Modus (stdin trägt Hermes' JSON): {"context": "<text>"} beim ersten Aufruf
 #     der Session, {} bei jedem weiteren.
 #   Klartext-Modus (stdin leer, z.B. `hermes cron create --no-agent --script …`):
-#     der Text roh auf stdout, ohne Dedupe.
+#     NUR der Fälligkeits-Nudge roh auf stdout, ohne Dedupe, nichts bei null
+#     Fälligkeiten — das geht als Push-Nachricht aufs Telefon, nicht in einen
+#     Agentenkontext.
 #
 # Vertrag (wie upstream): ambient, nie nörgelnd — höchstens ein Nudge pro Session,
 # und bei JEDEM Fehler Verstummen statt Wiederholung. Jeder Pfad endet mit exit 0.
@@ -61,6 +63,7 @@ except Exception: print("")' 2>/dev/null | tr -c 'A-Za-z0-9_-' '_' | cut -c1-80)
 fi
 
 OUT=""
+NUDGE=""
 add() { [ -n "${1:-}" ] || return 0; OUT="${OUT}${OUT:+$'\n\n'}$1"; }
 
 # --- 1. Lernstand nachziehen --------------------------------------------------
@@ -111,8 +114,9 @@ fi
 # die Kommandos engram-*, also wird die Ausgabe umgeschrieben statt Upstream-Code
 # gepatcht — das hält `git merge upstream/main` konfliktfrei.
 python3 "$ENGRAM_PROJECT/scripts/engram.py" init >/dev/null 2>&1
-add "$(python3 "$ENGRAM_PROJECT/scripts/engram.py" session-start 2>/dev/null \
+NUDGE="$(python3 "$ENGRAM_PROJECT/scripts/engram.py" session-start 2>/dev/null \
         | sed -E 's#/(learn|review|coach)\b#/engram-\1#g' || true)"
+add "$NUDGE"
 
 # --- 4. Upstream-Sync-Check ---------------------------------------------------
 # Wiederverwendet, nicht kopiert: das Skript ist plattformneutral (git ls-remote +
@@ -158,6 +162,17 @@ _hh="${HERMES_HOME:-$HOME/.hermes}"
 if [ -n "$payload" ]; then
   emit_json "$OUT"
 else
-  [ -n "$OUT" ] && printf '%s\n' "$OUT"
+  # Klartext-Modus = `hermes cron create --no-agent --script … --deliver telegram`.
+  # Hier geht NUR der Fälligkeits-Nudge raus, nicht das ganze Briefing.
+  #
+  # Der Unterschied ist nicht kosmetisch: Im Hook-Modus liest ein Agent den Text
+  # einmal pro Session als Kontext — da gehört das Briefing hin. Im Klartext-Modus
+  # landet er als Push-Nachricht auf einem Telefon, jeden Morgen. Ein 3000-Zeichen-
+  # Briefing an dieser Stelle ist die Benachrichtigung, die man nach drei Tagen
+  # stummschaltet — und mit ihr die tägliche Erinnerung, an der FSRS hängt.
+  #
+  # Ist nichts fällig, druckt die Engine nichts, und dann geht hier nichts raus:
+  # „ambient, nie nörgelnd" heißt auch, bei null Fälligkeiten zu schweigen.
+  [ -n "$NUDGE" ] && printf '%s\n' "$NUDGE"
 fi
 exit 0

@@ -6,6 +6,11 @@ vergleiche ihre Ausgabe mit dem, was hier steht. Wo etwas abweicht, melde es, st
 weiterzugehen. Am Ende steht ein Setup, das sich denselben Lernstand mit Claude Code
 teilt und einmal täglich eine Fälligkeits-Nudge aufs Handy schickt.
 
+> **Läuft auf diesem Rechner schon eine ältere Engram-Verdrahtung?** Dann ist das
+> hier das falsche Dokument — `.hermes/UMSTELLUNG-HERMES.md` nehmen. Eine
+> Neuinstallation über ein bestehendes Setup zu legen, hinterlässt zwei
+> Verdrahtungen, von denen die ältere still nichts mehr tut.
+
 Zeit: etwa 20 Minuten, davon der Großteil Warten auf `git clone` und das
 Telegram-Bot-Setup.
 
