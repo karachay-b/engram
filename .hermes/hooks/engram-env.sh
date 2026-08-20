@@ -26,6 +26,45 @@
 #   3. engram_state_sync_ok() kommt dazu — beide Hooks pullen und pushen, und
 #      beide müssen vorher wissen, ob das Repo dafür überhaupt in der Verfassung
 #      ist.
+#   4. Ein Riegel auf ENGRAM_HERMES=1 kommt VOR allem anderen. Ohne eigenes
+#      Hermes-Profil (siehe .hermes/UEBERGABE-HERMES.md, Schritt 1) findet dieser
+#      Resolver $HOME/engram IMMER — jede Hermes-Session auf dem Rechner bekäme
+#      sonst das Engram-Briefing injiziert, auch eine über etwas völlig anderes.
+#      Die Variable gehört in die .env des Profils; ist sie nicht in die
+#      Prozessumgebung vererbt (z. B. weil dieser Hook außerhalb von Hermes'
+#      eigenem Start läuft — ein Cron-Skript ist genau so ein Fall), lädt der
+#      Riegel sie selbst aus der Profil-.env nach, bevor er aufgibt.
+
+# --- ENGRAM_HERMES-Riegel ------------------------------------------------------
+# Fehlt die Variable, zuerst versuchen, sie (und die drei Pfade) aus der Profil-
+# .env nachzuladen — NUR ENGRAM_*-Zeilen, per case/Schlüssel-Weiße-Liste, kein
+# Sourcen der Datei: .env ist keine Shell und darf nicht blind ausgeführt werden.
+# Ein bereits gesetzter Wert hat Vorrang vor der Datei, nicht umgekehrt.
+if [ "${ENGRAM_HERMES:-}" != "1" ]; then
+  _env_file="${HERMES_HOME:-$HOME/.hermes}/.env"
+  if [ -f "$_env_file" ]; then
+    while IFS='=' read -r _k _v; do
+      case "$_k" in
+        ENGRAM_HERMES)     [ -n "${ENGRAM_HERMES:-}" ]     || ENGRAM_HERMES="$_v" ;;
+        ENGRAM_ROOT)       [ -n "${ENGRAM_ROOT:-}" ]       || ENGRAM_ROOT="$_v" ;;
+        ENGRAM_HOME)       [ -n "${ENGRAM_HOME:-}" ]       || ENGRAM_HOME="$_v" ;;
+        ENGRAM_STATE_REPO) [ -n "${ENGRAM_STATE_REPO:-}" ] || ENGRAM_STATE_REPO="$_v" ;;
+      esac
+    done < "$_env_file"
+  fi
+  unset _env_file _k _v
+fi
+
+# Immer noch nichts: Diese Session ist nicht das Profil engram, oder das Profil
+# ist nicht eingerichtet. Beide Hooks sollen dann still bleiben — sie tun das,
+# indem dieses gesourcte Skript mit Fehlschlag zurückkehrt (`return`, nicht
+# `exit`: es wird gesourct, nie direkt ausgeführt) und die Aufrufer den
+# bestehenden `|| done_` / `|| { …; exit 0; }`-Pfad nehmen, den sie ohnehin schon
+# für einen Sourcing-Fehler haben.
+if [ "${ENGRAM_HERMES:-}" != "1" ]; then
+  return 1 2>/dev/null || exit 1
+fi
+export ENGRAM_HERMES
 
 # --- das engram-Checkout ------------------------------------------------------
 # Erster Treffer gewinnt. BASH_SOURCE steht weit vorn, weil es exakt ist, sobald

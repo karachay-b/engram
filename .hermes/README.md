@@ -5,14 +5,23 @@ und CLI, dieselbe Konfiguration). Gegenstück zu `.claude/`, dasselbe Prinzip: D
 Upstream-Code bleibt unangetastet, alles Plattformspezifische lebt in einem Verzeichnis,
 das es upstream nicht gibt — deshalb kollidiert ein `git merge upstream/main` nie.
 
+**Gehört in ein eigenes Hermes-Profil `engram`** (`hermes profile create engram`,
+Übergabedatei Schritt 1), nicht in die Standard-Installation. Ohne die Abgrenzung
+fände der Resolver in `hooks/engram-env.sh` `$HOME/engram` in jeder Hermes-Session
+auf dem Rechner und injizierte das Engram-Briefing auch dort, wo es nicht hingehört
+— der Code-Riegel `ENGRAM_HERMES=1` in derselben Datei ist die zweite, unabhängige
+Absicherung dafür, das Profil die strukturelle.
+
 | Datei | Rolle |
 |---|---|
-| `UEBERGABE-HERMES.md` | **Hier anfangen.** Der Einrichtungsauftrag, Schritt 1–5, mit Prüfungen |
+| `UEBERGABE-HERMES.md` | **Hier anfangen.** Der Einrichtungsauftrag, Schritt 1–7, mit Prüfungen |
 | `PLATTFORM.md` | die bindenden Übersetzungen Claude Code → Hermes (`delegate_task`, Marker-Datei, kein Artifact-Weg) |
-| `config.snippet.yaml` | die Blöcke für `~/.hermes/config.yaml` |
-| `hooks/engram-env.sh` | gemeinsamer Resolver (Checkout + State-Repo), von beiden Hooks gesourct |
-| `hooks/session-start.sh` | `pre_llm_call`: Lernstand pullen, Briefing, Fälligkeits-Nudge — einmal pro Session |
+| `SOUL.snippet.md` | Vorlage für `~/.hermes/profiles/engram/SOUL.md` — Rolle + die drei bindenden Regeln, geladen unabhängig vom Arbeitsverzeichnis |
+| `config.snippet.yaml` | die Blöcke für `~/.hermes/profiles/engram/config.yaml`, inkl. `hooks_auto_accept` und der Cron-Kommandos für den Fälligkeits-Nudge aufs Handy |
+| `hooks/engram-env.sh` | gemeinsamer Resolver (Checkout + State-Repo) samt `ENGRAM_HERMES`-Riegel, von allen drei Hooks gesourct |
+| `hooks/session-start.sh` | `pre_llm_call`: Lernstand pullen, Briefing, Fälligkeits-Nudge — einmal pro Session, per Cron auch als tägliche Telegram-Zustellung |
 | `hooks/engram-save.sh` | `post_llm_call`: committen und nach `main` pushen — nach jedem Turn |
+| `hooks/engram-health.sh` | Wochen-Cron: meldet, wenn das State-Repo von `origin/main` abweicht — die zweite Meldeleitung, falls ein Push je still scheitert |
 | `skills/engram-*/SKILL.md` | die fünf Kommandos; dünne Aliase auf die Fassungen unter `.claude/skills/` |
 
 Upstream hat einen eigenen, schlankeren Hermes-Pfad (`INSTALL-HERMES.md`: `skills/` per

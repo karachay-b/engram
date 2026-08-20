@@ -1,12 +1,13 @@
 # Übergabe an Hermes Agent — Engram einrichten
 
 **An den Agenten, der das hier liest:** Das ist ein Arbeitsauftrag, keine Erzählung.
-Arbeite die Schritte 1–5 der Reihe nach ab, führe die Prüfungen wirklich aus und
+Arbeite die Schritte 1–7 der Reihe nach ab, führe die Prüfungen wirklich aus und
 vergleiche ihre Ausgabe mit dem, was hier steht. Wo etwas abweicht, melde es, statt
 weiterzugehen. Am Ende steht ein Setup, das sich denselben Lernstand mit Claude Code
-teilt.
+teilt und einmal täglich eine Fälligkeits-Nudge aufs Handy schickt.
 
-Zeit: etwa 15 Minuten, davon die Hälfte Warten auf `git clone`.
+Zeit: etwa 20 Minuten, davon der Großteil Warten auf `git clone` und das
+Telegram-Bot-Setup.
 
 ---
 
@@ -47,7 +48,39 @@ Sie gelten in jeder Session, auf jeder Plattform, ohne Ausnahme:
 
 ---
 
-## 1 · Voraussetzungen und Repos
+## 1 · Profil `engram` anlegen
+
+Alles Folgende gehört in ein **eigenes** Hermes-Profil, nicht in die Standard-
+Installation. Ein Profil ist ein eigenes `HERMES_HOME` mit eigener `config.yaml`,
+`.env`, `SOUL.md`, Sessions, Skills, Cron-Jobs und Gateway-Bot:
+
+```bash
+hermes profile create engram
+```
+
+Das legt `~/.hermes/profiles/engram/` an und einen Alias `~/.local/bin/engram` —
+der Einstieg heißt ab hier `engram chat`, nicht `hermes chat`. Prüfen:
+
+```bash
+ls ~/.hermes/profiles/engram/            # erwartet: (leeres) Verzeichnis existiert
+which engram                             # erwartet: ~/.local/bin/engram
+```
+
+**Warum ein eigenes Profil, nicht einfach Hooks in der Standard-Installation:**
+Ohne Abgrenzung findet der Resolver in `.hermes/hooks/engram-env.sh` `$HOME/engram`
+in JEDER Hermes-Session — auch einer über etwas völlig anderes — und injiziert das
+Engram-Briefing. Ein Profil ist ein eigenes `HERMES_HOME`; die beiden Hooks werden
+unten (Schritt 4) nur in dessen `config.yaml` registriert und feuern deshalb
+nirgends sonst. Der Code-Riegel (`ENGRAM_HERMES=1`, gesetzt in Schritt 3) ist die
+zweite, unabhängige Absicherung für den Fall eines Tippfehlers — das Profil ist
+die strukturelle.
+
+Alle folgenden Schritte (`.env`, `config.yaml`, `SOUL.md`) beziehen sich auf
+`~/.hermes/profiles/engram/`, nicht auf `~/.hermes/` direkt.
+
+---
+
+## 2 · Voraussetzungen und Repos
 
 ### Prüfen, bevor irgendetwas geklont wird
 
@@ -67,7 +100,7 @@ selbst ab). Danach das Modell setzen — für die Einrichtung **und** als Ausgan
 für den Alltag:
 
 ```yaml
-# ~/.hermes/config.yaml
+# ~/.hermes/profiles/engram/config.yaml
 model:
   default: "minimax/minimax-m3"
   provider: "nous"
@@ -146,15 +179,16 @@ git -C ~/engram remote add upstream https://github.com/nagisanzenin/engram.git
 
 ---
 
-## 2 · `~/.hermes/.env`
+## 3 · `~/.hermes/profiles/engram/.env`
 
-Drei Zeilen anhängen, `<DU>` durch den eigenen Benutzernamen ersetzen (macOS
+Vier Zeilen anhängen, `<DU>` durch den eigenen Benutzernamen ersetzen (macOS
 `/Users/<DU>`, Linux `/home/<DU>`) — **absolute Pfade, kein `~`**:
 
 ```bash
 ENGRAM_ROOT=/Users/<DU>/engram
 ENGRAM_HOME=/Users/<DU>/engram-learning/learning
 ENGRAM_STATE_REPO=/Users/<DU>/engram-learning
+ENGRAM_HERMES=1
 ```
 
 Hermes lädt `.env` beim Start in seinen Prozess, und Terminal-Subprozesse erben die
@@ -166,9 +200,15 @@ in die Session exportieren.
 anspringt. `ENGRAM_STATE_REPO` brauchen die beiden Zusatzwerkzeuge, falls das
 Geschwister-Layout doch einmal nicht steht.
 
+Die vierte Zeile ist der Code-Riegel aus `.hermes/hooks/engram-env.sh`: Fehlt sie,
+bleiben beide Hooks in JEDER Session still — auch in diesem Profil. Sie ist die
+Rückfallebene für den Fall, dass `.env` einmal nicht in die Prozessumgebung eines
+Hooks vererbt wird (z. B. bei einem Cron-Skript, siehe Schritt 6): Der Resolver
+lädt die Datei dann selbst nach, ausschließlich `ENGRAM_*`-Zeilen.
+
 ---
 
-## 3 · `~/.hermes/config.yaml`
+## 4 · `~/.hermes/profiles/engram/config.yaml`
 
 Vorlage: `~/engram/.hermes/config.snippet.yaml`. Die beiden Blöcke dort in die
 **bestehende** `config.yaml` einsortieren — `skills:` und `hooks:` sind
@@ -187,16 +227,31 @@ hooks:
   post_llm_call:
     - command: "/Users/<DU>/engram/.hermes/hooks/engram-save.sh"
       timeout: 120
+
+hooks_auto_accept: true
 ```
 
-Zwei Fallen:
+Danach `SOUL.md` einspielen — das ist der einzige Kanal, der unabhängig vom
+Arbeitsverzeichnis in jeder Session dieses Profils geladen wird:
+
+```bash
+cp ~/engram/.hermes/SOUL.snippet.md ~/.hermes/profiles/engram/SOUL.md
+```
+
+Kein Einsortieren wie bei `config.yaml` — `SOUL.md` ist eine eigenständige Datei,
+kein Abschnitt in einer bestehenden.
+
+Drei Fallen:
 
 - Bei `external_dirs` wird `~` expandiert, bei `command` **nicht**. Hook-Kommandos
   deshalb absolut schreiben.
 - Beim ersten Feuern fragt Hermes je (Event, Kommando) einmal nach Zustimmung und
-  merkt sie sich in `~/.hermes/shell-hooks-allowlist.json`. **Beide bestätigen** —
-  wird der `post_llm_call`-Hook abgelehnt, läuft alles weiter, nur wird nichts mehr
-  gespeichert. Das ist der eine Fehler, der sich erst Wochen später zeigt.
+  merkt sie sich in `~/.hermes/profiles/engram/shell-hooks-allowlist.json`. Mit
+  `hooks_auto_accept: true` (siehe oben) entfällt das hier — begründet in
+  `config.snippet.yaml` selbst: Cron und der Gateway-Bot haben kein TTY für den
+  Prompt.
+- `hooks_auto_accept: true` gilt nur in diesem Profil — in `~/.hermes/config.yaml`
+  (ohne `-p engram`) darf dieser Schlüssel nicht stehen, sonst gilt er global.
 
 Danach Hermes neu starten (Desktop-App: beenden und öffnen, nicht nur das Fenster
 schließen). Die Desktop-App und die CLI teilen sich `~/.hermes` vollständig — was hier
@@ -204,12 +259,24 @@ eingerichtet wird, gilt für beide.
 
 ---
 
-## 4 · Verifikation
+## 5 · Verifikation
 
-Alle fünf Prüfungen ausführen und die Ausgabe vergleichen. Die dritte ist die
-wichtigste — sie beweist die ganze Verdrahtung auf einmal.
+Alle sieben Prüfungen ausführen und die Ausgabe vergleichen. Die dritte (jetzt: fünfte)
+ist die wichtigste — sie beweist die ganze Verdrahtung auf einmal.
 
 ```bash
+# 0a · Riegel — außerhalb des Profils bleiben beide Hooks still
+echo '{"session_id":"probe-0a"}' | env -u ENGRAM_HERMES -u HERMES_HOME \
+  bash ~/engram/.hermes/hooks/session-start.sh
+#    erwartet: {}  — auch wenn ENGRAM_HERMES in der Profil-.env steht: dieser Aufruf
+#    hat keine Hermes-Prozessumgebung und kein HERMES_HOME, findet die Datei also nicht.
+
+# 0b · innerhalb des Profils antwortet der Hook wirklich
+echo '{"session_id":"probe-0b"}' | HERMES_HOME=~/.hermes/profiles/engram \
+  bash ~/engram/.hermes/hooks/session-start.sh | python3 -m json.tool | head -5
+#    erwartet: ein JSON-Objekt mit "context" — das Briefing. Das ist der Beweis,
+#    dass Riegel UND Profil-Isolation beide wie vorgesehen funktionieren.
+
 # 1 · Die Engine ist intakt
 python3 ~/engram/scripts/engram.py selftest
 #    erwartet: eine Zeile, die mit N/N endet (alle bestanden, N ist dreistellig)
@@ -222,27 +289,92 @@ python3 ~/engram/.claude/tools/engram_status.py selftest
 # 3 · DIE ENTSCHEIDENDE — zeigt die Engine ins private Repo?
 python3 ~/engram/scripts/engram.py doctor | python3 -m json.tool | head -20
 #    erwartet: "home": "/Users/<DU>/engram-learning/learning"
-#    steht dort etwas mit ".claude/learning", ist Schritt 2 nicht angekommen:
+#    steht dort etwas mit ".claude/learning", ist Schritt 3 nicht angekommen:
 #    Hermes wurde nicht neu gestartet, oder .env hat einen Tippfehler. NICHT weitergehen.
 
-# 4 · Der Sessionstart-Hook antwortet gültig
-echo '{"session_id":"probe-1"}' | bash ~/engram/.hermes/hooks/session-start.sh | python3 -m json.tool | head -5
+# 4 · Der Sessionstart-Hook antwortet gültig — innerhalb des Profils, wie 0b:
+# ohne HERMES_HOME auf die Profil-.env zu zeigen, greift seit dem Riegel (Schritt 1/3)
+# derselbe stille {}-Pfad wie in 0a, auch wenn dieser Aufruf sonst alles richtig macht.
+echo '{"session_id":"probe-1"}' | HERMES_HOME=~/.hermes/profiles/engram \
+  bash ~/engram/.hermes/hooks/session-start.sh | python3 -m json.tool | head -5
 #    erwartet: ein JSON-Objekt mit "context" (Briefing + ggf. Fälligkeiten)
-echo '{"session_id":"probe-1"}' | bash ~/engram/.hermes/hooks/session-start.sh
+echo '{"session_id":"probe-1"}' | HERMES_HOME=~/.hermes/profiles/engram \
+  bash ~/engram/.hermes/hooks/session-start.sh
 #    erwartet: genau {}  — die Dedupe-Sperre greift, kein zweites Briefing pro Session
 
 # 5 · Der Speicher-Hook ist bei sauberem Baum still
-echo '{"session_id":"probe-1"}' | bash ~/engram/.hermes/hooks/engram-save.sh
+echo '{"session_id":"probe-1"}' | HERMES_HOME=~/.hermes/profiles/engram \
+  bash ~/engram/.hermes/hooks/engram-save.sh
 #    erwartet: {} auf stdout und nichts auf stderr
+
+# 6 · SOUL.md ist eingespielt
+head -3 ~/.hermes/profiles/engram/SOUL.md
+#    erwartet: die Überschrift "# SOUL.md — Profil `engram`"
+
+# 7 · Die Verdrahtung steht NICHT global
+grep -q "engram" ~/.hermes/config.yaml && echo "FEHLER: engram-Hooks stehen in der globalen config.yaml" || echo "ok: global sauber"
+#    erwartet: "ok: global sauber" — sonst feuert die Verdrahtung wieder überall,
+#    genau der Defekt, den das eigene Profil beheben sollte.
 ```
 
 Dann in Hermes selbst: `/engram-status` eingeben. Der Skill muss auftauchen (er kommt
 aus `external_dirs`) und mit einem Bootstrap-Block starten, der `ENGRAM_ROOT` und
 `ENGRAM_HOME` **gefüllt** ausgibt.
 
+**Abweichung von Prüfungen 4/5 vor diesem Umzug:** Vor dem eigenen Profil liefen diese
+beiden Aufrufe ohne `HERMES_HOME`-Präfix — der Riegel aus Schritt 1 macht sie seither
+davon abhängig, sonst antworten sie still mit `{}` statt mit dem Briefing, und das sähe
+wie ein Fehler in der Kette aus, ist aber nur die fehlende Profil-Umgebung in einem
+manuell gestarteten Terminal.
+
 ---
 
-## 5 · Der erste echte Lauf
+## 6 · Gateway/Cron einrichten
+
+Die Fähigkeit, für die sich der Umzug lohnt: eine Fälligkeits-Nudge aufs Handy,
+plus eine wöchentliche Gesundheitsmeldung, falls der Auto-Save je scheitert.
+
+```bash
+hermes -p engram gateway setup                        # Telegram-Bot, interaktiv
+hermes -p engram cron create --no-agent \
+  --script ~/engram/.hermes/hooks/session-start.sh \
+  --deliver telegram --schedule "0 8 * * *"            # täglich 8 Uhr: Fälligkeiten
+hermes -p engram cron create --no-agent \
+  --script ~/engram/.hermes/hooks/engram-health.sh \
+  --deliver telegram --schedule "0 8 * * 1"             # montags 8 Uhr: Sync-Gesundheit
+```
+
+`session-start.sh` erkennt leeres stdin automatisch (Klartext-Modus, siehe die
+Kommentare am Kopf der Datei) und schweigt, wenn nichts fällig ist — der Cron
+verschickt dann einfach nichts. `engram-health.sh` verschickt grundsätzlich nur
+bei einer Abweichung.
+
+**Nicht verifiziert.** Upstream markiert genau diese Art Cron-Zustellung
+(`--deliver telegram` an ein `--no-agent`-Skript) ausdrücklich als „not yet
+verified" — die Flags oben stammen aus der Hermes-Dokumentation, nicht aus einem
+beobachteten Lauf. Nach der Einrichtung von Hand nachsehen:
+
+```bash
+hermes -p engram cron list
+#    erwartet: beide Jobs mit dem richtigen Schedule
+```
+
+und danach abwarten (oder testweise einen Job mit `hermes -p engram cron run
+<id>` manuell auslösen, falls dieser Unterbefehl existiert) und in Telegram
+prüfen, ob die Nachricht wirklich ankommt. Kommt nichts an, obwohl `cron list`
+den Job zeigt: `hooks_auto_accept` in Schritt 4 prüfen (ohne `true` bleibt der
+Job beim Zustimmungs-Prompt hängen, den niemand beantwortet) und ob
+`gateway setup` wirklich abgeschlossen wurde.
+
+**Es verlassen nur Metadaten den Rechner** — Fälligkeits-Zahlen, keine
+Lernerantworten. `engram-health.sh` verschickt nur Pfade und Zählwerte.
+
+**Der Rechner muss laufen.** Ein Cron-Job auf einem zugeklappten Laptop feuert
+nicht — das gilt für beide Jobs oben.
+
+---
+
+## 7 · Der erste echte Lauf
 
 ```
 /engram-status      → wo steht der Lernstand, welche Quellen sind eingebunden
@@ -258,7 +390,7 @@ git -C ~/engram-learning log --oneline -3
 Steht dort ein frischer Commit `engram (hermes): … Themen, … Konzepte, … Receipts`,
 funktioniert die Kette vollständig: Engine → State-Repo → `origin/main` → Claude Code.
 Steht er nicht da, war die Session ohne Änderung (dann ist das korrekt) — oder der
-`post_llm_call`-Hook ist nicht bestätigt. Dann Schritt 3 nachsehen.
+`post_llm_call`-Hook ist nicht bestätigt. Dann Schritt 4 nachsehen.
 
 ---
 
@@ -290,9 +422,20 @@ Weigerung beider Hooks auf einem Nicht-`main`-Branch, und die Selftests von Engi
 
 **Nicht geprüft, weil keine Hermes-Installation vorlag:** ob die fünf Skills im Index
 landen, ob Hermes die Hooks tatsächlich feuert, und ob `delegate_task` den Assessor blind
-hält. Genau dafür sind Schritt 4 und 5 da — sie sind keine Formsache. Upstream markiert
+hält. Genau dafür sind Schritt 5 und 7 da — sie sind keine Formsache. Upstream markiert
 seinen eigenen Hermes-Teil aus demselben Grund teilweise als „not yet verified"; diese
 Ehrlichkeit wird hier fortgeschrieben, nicht überschrieben.
+
+- **Der `ENGRAM_HERMES`-Riegel ist nur gegen die Dokumentation geschrieben, nicht
+  gegen eine echte Hermes-Installation verifiziert** — insbesondere, ob Hermes
+  `.env` tatsächlich so an Cron-Subprozesse vererbt (oder eben nicht) wie
+  angenommen. Die Prüfungen 0a/0b in Schritt 5 sind der Ersatz dafür; sie zeigen
+  nur, dass die Hook-Logik selbst korrekt reagiert, nicht dass Hermes sie in der
+  Praxis genauso aufruft.
+- **Ob `hermes profile create` und `hermes -p engram` sich wie hier beschrieben
+  verhalten, ist ebenfalls nur gegen die Dokumentation geschrieben.** Kein Lauf
+  gegen eine echte Installation lag vor. Schritt 1 und 6 tragen deshalb dasselbe
+  Risiko wie der Cron-Teil oben.
 
 Weiter:
 
