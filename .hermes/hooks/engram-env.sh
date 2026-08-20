@@ -88,6 +88,34 @@ _engram_native_path() {  # $1 = Pfad; auf stdout der normalisierte Pfad, leer be
   fi
 }
 
+# --- Interpreter-Auflösung, derselbe Gate-Fehler wie bei cygpath vermieden ----
+# Windows/MSYS-Abweichung (gemessen, siehe .hermes/PLATTFORM.md §7.1): Auf einem
+# Host mit installiertem Windows-Python-Store-Alias zeigt `python3` in
+# `/c/Users/.../WindowsApps/python3` auf den Store-Hinweis statt auf eine echte
+# Installation. `command -v python3` findet diesen Stub trotzdem — er ist ein
+# ausführbares Ding im PATH, `command -v` prüft nicht, ob er funktioniert. Jeder
+# `python3`-Aufruf aus einem Hook scheitert dann mit Exit 49, und die Hooks
+# fallen lautlos auf ihren `|| exit 0`-Pfad: der Due-Nudge, die
+# Interessen-Gate-Warnung und die echte Commit-Message-Statistik verstummen,
+# ohne dass irgendwo ein Fehler sichtbar wird. Derselbe Fehlermodus wie beim
+# ungegateten `cygpath` oben — hier deshalb derselbe Kniff: nicht nur prüfen, ob
+# der Befehl EXISTIERT (`command -v`), sondern ob er tatsächlich LÄUFT (`-c ''`).
+#
+# Reihenfolge python3 → py -3 → python: unverändertes Verhalten auf jedem Host,
+# auf dem `python3` schon funktioniert (macOS, Linux, jede normale
+# Windows-Installation) — dort liefert schon der erste Versuch. `py -3` ist der
+# Windows-Python-Launcher, Standardbestandteil jeder offiziellen
+# Windows-Python-Installation und genau der Befehl, den §7.1 als zuverlässig
+# nennt.
+_engram_python() {  # stdout: lauffähiger Interpreter-Befehl; leer bei Fehlschlag
+  command -v python3 >/dev/null 2>&1 && python3 -c '' >/dev/null 2>&1 && { echo "python3"; return 0; }
+  command -v py      >/dev/null 2>&1 && py -3 -c ''    >/dev/null 2>&1 && { echo "py -3"; return 0; }
+  command -v python  >/dev/null 2>&1 && python -c ''   >/dev/null 2>&1 && { echo "python"; return 0; }
+  return 1
+}
+ENGRAM_PY="$(_engram_python)"
+export ENGRAM_PY
+
 # --- das engram-Checkout ------------------------------------------------------
 # Erster Treffer gewinnt. BASH_SOURCE steht weit vorn, weil es exakt ist, sobald
 # diese Datei über ihren Pfad gesourct wird — und Hermes ruft Hooks immer mit

@@ -52,9 +52,13 @@ git -C "$ENGRAM_STATE" config user.name  >/dev/null 2>&1 || git -C "$ENGRAM_STAT
 git -C "$ENGRAM_STATE" config user.email >/dev/null 2>&1 || git -C "$ENGRAM_STATE" config user.email "engram@localhost"
 
 # Eine Commit-Message, die sagt, was sich tatsächlich geändert hat — direkt aus der
-# Engine gelesen, nicht geschätzt.
-SUMMARY="$(ENGRAM_HOME="$ENGRAM_HOME" python3 "$ENGRAM_PROJECT/scripts/engram.py" doctor 2>/dev/null \
-  | python3 -c 'import json,sys
+# Engine gelesen, nicht geschätzt. $ENGRAM_PY statt python3 (gesetzt in engram-env.sh,
+# leer wenn kein lauffähiger Interpreter gefunden wurde, siehe PLATTFORM.md §7.1) —
+# ist die Variable leer, verpufft der Aufruf, `doctor` liefert nichts, und die
+# generische Meldung unten greift. Der Commit und der Push bleiben davon unberührt:
+# git braucht kein Python, nur die Statistik in der Nachricht fehlt dann.
+SUMMARY="$(ENGRAM_HOME="$ENGRAM_HOME" $ENGRAM_PY "$ENGRAM_PROJECT/scripts/engram.py" doctor 2>/dev/null \
+  | $ENGRAM_PY -c 'import json,sys
 try:
     d = json.load(sys.stdin)
     print("%s Themen, %s Konzepte, %s Receipts" % (d.get("topics",0), d.get("nodes",0), d.get("receipts",0)))

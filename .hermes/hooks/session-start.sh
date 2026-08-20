@@ -26,11 +26,9 @@ set -u
 
 emit_json() {  # $1 = Kontexttext (leer → {})
   if [ -z "${1:-}" ]; then printf '{}\n'; return 0; fi
-  printf '%s' "$1" | python3 -c 'import sys,json; print(json.dumps({"context": sys.stdin.read().strip()}))' 2>/dev/null \
+  printf '%s' "$1" | $ENGRAM_PY -c 'import sys,json; print(json.dumps({"context": sys.stdin.read().strip()}))' 2>/dev/null \
     || printf '{}\n'
 }
-
-command -v python3 >/dev/null 2>&1 || { printf '{}\n'; exit 0; }
 
 payload="$(cat - 2>/dev/null || true)"
 
@@ -43,6 +41,16 @@ if [ -z "${ENGRAM_PROJECT:-}" ] || [ ! -f "$ENGRAM_PROJECT/scripts/engram.py" ];
   exit 0
 fi
 
+# Verlegt hierher (vorher: `command -v python3` VOR dem Sourcen von engram-env.sh).
+# ENGRAM_PY steht erst nach dem Sourcen fest, und die alte `command -v python3`-Prüfung
+# hatte genau die Schwäche, die `_engram_python()` in engram-env.sh beheben soll:
+# `command -v` findet auch einen Windows-Store-Stub, der nicht läuft, wenn man ihn
+# aufruft. Siehe .hermes/PLATTFORM.md §7.1.
+if [ -z "${ENGRAM_PY:-}" ]; then
+  [ -n "$payload" ] && printf '{}\n'
+  exit 0
+fi
+
 # --- Dedupe zuerst ------------------------------------------------------------
 # Vor der Arbeit, nicht danach: Der teure Teil (pull, init, Nudge, Sync-Check) soll
 # in einer Session genau einmal laufen, nicht bei jedem LLM-Aufruf. Schlüssel ist die
@@ -50,7 +58,7 @@ fi
 # damit fällt die Sperre GESCHLOSSEN aus (höchstens einmal pro Hermes-Prozess) und
 # nie offen (einmal pro Aufruf).
 if [ -n "$payload" ]; then
-  session_id="$(printf '%s' "$payload" | python3 -c 'import sys,json
+  session_id="$(printf '%s' "$payload" | $ENGRAM_PY -c 'import sys,json
 try: print(json.load(sys.stdin).get("session_id") or "")
 except Exception: print("")' 2>/dev/null | tr -c 'A-Za-z0-9_-' '_' | cut -c1-80)" || session_id=""
   [ -n "$session_id" ] || session_id="pid-${PPID:-0}"
@@ -113,8 +121,8 @@ fi
 # Die Engine druckt die Upstream-Schreibweise (/learn, /review, /coach). Hier heißen
 # die Kommandos engram-*, also wird die Ausgabe umgeschrieben statt Upstream-Code
 # gepatcht — das hält `git merge upstream/main` konfliktfrei.
-python3 "$ENGRAM_PROJECT/scripts/engram.py" init >/dev/null 2>&1
-NUDGE="$(python3 "$ENGRAM_PROJECT/scripts/engram.py" session-start 2>/dev/null \
+$ENGRAM_PY "$ENGRAM_PROJECT/scripts/engram.py" init >/dev/null 2>&1
+NUDGE="$($ENGRAM_PY "$ENGRAM_PROJECT/scripts/engram.py" session-start 2>/dev/null \
         | sed -E 's#/(learn|review|coach)\b#/engram-\1#g' || true)"
 add "$NUDGE"
 
@@ -129,7 +137,7 @@ fi
 # Themen da, `interests` leer: die Signatur eines übersprungenen Intake-Schritts 3.
 # Ein frischer Stand ohne Themen bleibt still, sonst wäre die Warnung schon in der
 # allerersten Session Rauschen.
-add "$(python3 - "${ENGRAM_HOME:-$HOME/.claude/learning}" <<'PY' 2>/dev/null || true
+add "$($ENGRAM_PY - "${ENGRAM_HOME:-$HOME/.claude/learning}" <<'PY' 2>/dev/null || true
 import json, os, sys
 home = sys.argv[1]
 try:
