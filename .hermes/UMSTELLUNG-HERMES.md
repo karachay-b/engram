@@ -38,19 +38,48 @@ völlig andere Themen.
 git -C ~/engram-learning status --short
 git -C ~/engram-learning rev-parse --abbrev-ref HEAD     # muss: main
 git -C ~/engram-learning log --oneline -1
-git -C ~/engram-learning push origin HEAD:main
 ```
 
 - **Nicht `main`?** Anhalten und melden. Alles Weitere setzt `main` voraus; die
   neuen Hooks pushen ausschließlich dorthin.
-- **`status` zeigt Änderungen?** Erst committen und pushen:
-  `git -C ~/engram-learning add -A -- learning sources && git -C ~/engram-learning commit -m "engram: Stand vor der Umstellung" && git -C ~/engram-learning push origin HEAD:main`
-- **`push` meldet „Everything up-to-date"?** Perfekt — der Stand liegt sicher auf
-  dem Remote, und die Umstellung kann nichts mehr kosten.
+- **`status` zeigt nichts?** Direkt weiter mit
+  `git -C ~/engram-learning push origin HEAD:main` — meldet der „Everything
+  up-to-date", liegt der Stand schon sicher auf dem Remote, und die Umstellung
+  kann nichts mehr kosten.
+- **`status` zeigt Änderungen?** Nicht blind committen — erst prüfen, OB
+  Löschungen darunter sind:
 
-Diese vier Zeilen sind die eigentliche Versicherung dieses Dokuments. Der Lernstand
-lebt im Git-Repo, nicht in der Hermes-Konfiguration — ist er gepusht, ist jeder
-weitere Schritt umkehrbar.
+  ```bash
+  git -C ~/engram-learning status --porcelain -- learning sources | grep -E '^.D|^D.'
+  ```
+
+  **Zeigt das etwas — Halt, nicht committen.** `git add -A` unterscheidet nicht
+  zwischen „Stand sichern" und „etwas zerstören": Ein Commit hier pusht die
+  Löschung sofort auf `origin/main`, wo sie ab dann für jeden sichtbar ist, der
+  das Repo klont — kein lokaler Zustand mehr, der sich still zurücknehmen ließe.
+  **Gemessen am 2026-08-20:** genau das ist einmal passiert — ein ganzes Thema
+  samt Quelle verschwand über diesen Weg von `origin/main`, weil eine lokale
+  Löschung (Ursache unbekannt, vermutlich ein Abbruch oder Experiment) beim
+  routinemäßigen Sichern kommentarlos mitgepusht wurde. Die Löschung war im
+  Nachhinein gewollt, aber das stand vorher nirgends — der Check hier ist die
+  Nachrüstung, die das nächste Mal vorher klärt statt hinterher.
+
+  Stattdessen: die betroffenen Pfade zeigen
+  (`git -C ~/engram-learning status --short -- learning sources`) und den
+  Nutzer fragen, ob die Löschung beabsichtigt ist. Erst nach einer klaren
+  Antwort weiter — bei „ja" wie unten committen; bei „nein" oder Unsicherheit
+  die gelöschten Pfade aus dem letzten bekannten guten Commit wiederherstellen
+  (`git -C ~/engram-learning checkout <letzter-guter-commit> -- <pfade>`) und
+  **danach** committen.
+
+  **Zeigt das nichts — nur Änderungen und Neues, keine Löschungen —, sicher
+  committen und pushen:**
+  `git -C ~/engram-learning add -A -- learning sources && git -C ~/engram-learning commit -m "engram: Stand vor der Umstellung" && git -C ~/engram-learning push origin HEAD:main`
+
+Der Lernstand lebt im Git-Repo, nicht in der Hermes-Konfiguration — ist er gepusht,
+ist jeder weitere Schritt umkehrbar. Der Löschungs-Check oben ist die Erweiterung
+dieser Versicherung: Er verhindert, dass „sichern" versehentlich zu „übernehmen,
+was gerade zufällig im Arbeitsbaum fehlt" wird.
 
 ## Schritt 1 · Bestandsaufnahme — die alten Werte merken
 
