@@ -1,43 +1,56 @@
-# Engram auf Hermes Agent — die Blöcke für ~/.hermes/config.yaml
+# Engram auf Hermes Agent — die Blöcke für ~/.hermes/profiles/engram/config.yaml
 #
-# NICHT diese Datei als config.yaml verwenden. Der Inhalt gehört in die bestehende
-# ~/.hermes/config.yaml einsortiert: `skills:` und `hooks:` sind Top-Level-Schlüssel,
-# und wer sie doppelt anlegt, verliert stillschweigend den ersten.
+# Diese Datei gehört in ein EIGENES Hermes-Profil (`hermes profile create engram`),
+# NICHT in die globale ~/.hermes/config.yaml — siehe .hermes/UEBERGABE-HERMES.md,
+# Schritt 1. Ein Profil ist ein eigenes HERMES_HOME mit eigener config.yaml, .env,
+# SOUL.md, Sessions, Skills, Cron-Jobs und Gateway-Bot; die beiden Hooks unten
+# feuern dann NUR in diesem Profil. Ohne das eigene Profil bekäme jede
+# Hermes-Session auf dem Rechner — auch eine über etwas völlig anderes — das
+# Engram-Briefing injiziert, weil der Resolver $HOME/engram immer findet.
 #
 # <DU> überall durch den eigenen Benutzernamen ersetzen (macOS: /Users/<DU>,
-# Linux: /home/<DU>). Die Übergabedatei .hermes/UEBERGABE-HERMES.md, Schritt 3,
-# führt durch die Einrichtung.
+# Linux: /home/<DU>).
 
 skills:
   external_dirs:
-    # Nur die Hermes-Aliase registrieren, NICHT ~/engram/skills.
-    #
-    # Zwei Gründe: `learn` ist der Name eines Hermes-Builtins (es baut neue Skills aus
-    # Quellen) und lässt sich nicht überschreiben — der Upstream-Skill hieße also anders,
-    # als überall dokumentiert steht. Und `review`/`coach` stünden doppelt im Index, einmal
-    # mit und einmal ohne die Regeln dieses Forks. Die Upstream-Skills werden weiterhin
-    # GELESEN (die Aliase verweisen auf ihren vollen Pfad), nur nicht registriert.
+    # Nur die Hermes-Aliase registrieren, NICHT ~/engram/skills — Begründung in
+    # der Vorlage-Datei selbst nicht wiederholt, siehe UEBERGABE-HERMES.md Schritt 4.
     - ~/engram/.hermes/skills
 
 hooks:
-  # Sessionstart: pullt den Lernstand, gibt das Briefing und den Fälligkeits-Nudge aus.
-  # Feuert bei jedem LLM-Aufruf, tut aber nur beim ersten pro Session etwas.
+  # Sessionstart: pullt den Lernstand, gibt das Briefing und den Fälligkeits-Nudge
+  # aus. Feuert bei jedem LLM-Aufruf, tut aber nur beim ersten pro Session etwas.
   pre_llm_call:
     - command: "/Users/<DU>/engram/.hermes/hooks/session-start.sh"
       timeout: 120
 
-  # Auto-Save: committet und pusht den Lernstand nach jedem Turn.
-  # `post_llm_call` feuert einmal pro Turn, nachdem die Tool-Schleife durch ist —
-  # das genaue Gegenstück zum Stop-Hook in Claude Code. Bei sauberem Baum ein No-Op.
-  #
-  # OHNE DIESEN HOOK bleibt der Lernstand auf dieser Platte liegen und Claude Code
-  # sieht ihn nie. Er ist der Grund, warum beide Plattformen einen Kalender teilen.
+  # Auto-Save: committet und pusht den Lernstand nach jedem Turn — ohne diesen
+  # Hook bleibt der Lernstand auf dieser Platte liegen und Claude Code sieht ihn
+  # nie.
   post_llm_call:
     - command: "/Users/<DU>/engram/.hermes/hooks/engram-save.sh"
       timeout: 120
 
-# Beim ersten Feuern fragt Hermes je (Event, Kommando) einmal nach Zustimmung und merkt
-# sie sich in ~/.hermes/shell-hooks-allowlist.json. Das ist gewollt — einmal bestätigen.
-# Auf `true` nur setzen, wenn Hermes ohne Terminal laufen soll (Gateway, cron, CI);
-# dann gilt die Zustimmung für JEDEN Shell-Hook, auch für später hinzukommende.
-hooks_auto_accept: false
+# Beim ersten Feuern fragt Hermes je (Event, Kommando) einmal nach Zustimmung und
+# merkt sie sich in ~/.hermes/profiles/engram/shell-hooks-allowlist.json — normal
+# wäre das einmalige Bestätigen ausreichend (false). Hier steht `true`, weil
+# Cron (Fälligkeits-Nudge, Gesundheitscheck) und der Telegram-Gateway-Bot ohne TTY
+# laufen und den Zustimmungs-Prompt nie beantworten könnten — ohne Auto-Accept
+# bliebe die Automatik beim ersten unbeaufsichtigten Lauf hängen.
+#
+# Das ist NUR vertretbar, weil `true` hier auf DIESES PROFIL begrenzt ist. In der
+# globalen ~/.hermes/config.yaml wäre es ein Freibrief für jeden künftigen
+# Shell-Hook in jeder Hermes-Session — der zweite Grund für das eigene Profil.
+hooks_auto_accept: true
+
+# Cron- und Gateway-Einrichtung läuft NICHT über diese Datei, sondern über die
+# Hermes-CLI — siehe .hermes/UEBERGABE-HERMES.md, Schritt 6 „Gateway/Cron
+# einrichten":
+#
+#   hermes -p engram gateway setup
+#   hermes -p engram cron create --no-agent \
+#     --script ~/engram/.hermes/hooks/session-start.sh \
+#     --deliver telegram --schedule "0 8 * * *"
+#   hermes -p engram cron create --no-agent \
+#     --script ~/engram/.hermes/hooks/engram-health.sh \
+#     --deliver telegram --schedule "0 8 * * 1"

@@ -43,9 +43,15 @@ nach Git gepusht wird.
 - Den echten Pfad immer aus `python3 scripts/engram.py doctor` (Feld `home`) lesen.
   **Nie `~/.claude/learning` wörtlich ausgeben** — hier stimmt das nicht.
 
-Der Stop-Hook (`.claude/hooks/engram-save.sh`) committet und pusht automatisch nach
-jedem Turn. Meldet er einen fehlgeschlagenen Push, muss der Push manuell nachgeholt
-werden, bevor die Session endet.
+Der Stop-Hook (`.claude/hooks/engram-save.sh`) committet und pusht automatisch
+nach jedem Turn, fest nach `main` (nicht mehr den aktuellen Branch) — seit dem
+Umzug der Lernarbeit nach Hermes ist das der Rückfallweg, falls doch einmal in
+einer Claude-Session Lernstand entsteht, nicht mehr der Hauptschreiber. Er
+verweigert das automatische Pushen, wenn das State-Repo nicht auf `main` steht
+oder mitten in einem Rebase/Merge hängt (`engram_state_sync_ok()` in der Datei
+selbst) — dann liegt der Stand unversehrt im Arbeitsbaum, aber ungepusht. Meldet
+er einen fehlgeschlagenen Push, muss der Push manuell nachgeholt werden, bevor die
+Session endet.
 
 ### Hooks laufen nicht in jeder Session
 
@@ -281,10 +287,14 @@ deshalb weiterhin: an genau einer Stelle ändern.
 
 ## Zweite Plattform: Hermes Agent
 
-Dasselbe Setup läuft in der **Hermes Agent Desktop-App** (Nous Research) — gedacht als
-der günstige Alltagsweg, während Claude Code die Arbeit am Setup selbst behält. Die
-Verdrahtung liegt unter `.hermes/`, gebaut nach demselben Prinzip wie `.claude/`: ein
-Verzeichnis, das es upstream nicht gibt, also nie ein Merge-Konflikt.
+Dasselbe Setup läuft in der **Hermes Agent Desktop-App** (Nous Research) —
+**mittlerweile die alleinige Lernbühne**: Andre lernt auf Hermes (eigenes Profil
+`engram`, siehe `.hermes/UEBERGABE-HERMES.md`), Claude Code bleibt für
+Upstream-Merges, Refactorings und Arbeit am Setup selbst. Beide schreiben
+weiterhin denselben Lernstand — nur schreibt in der Praxis meist nur noch eine
+Seite. Die Verdrahtung liegt unter `.hermes/`, gebaut nach demselben Prinzip wie
+`.claude/`: ein Verzeichnis, das es upstream nicht gibt, also nie ein
+Merge-Konflikt.
 
 **Der eine Satz, der zählt: derselbe Lernstand.** Beide Plattformen schreiben nach
 `karachay-b/engram-learning`, Branch `main` — Hermes pullt beim Sessionstart

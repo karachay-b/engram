@@ -13,6 +13,12 @@ committet und pusht nach jedem Turn dorthin — **ohne Push ist der Lernstand mi
 Container weg.** Meldet er einen fehlgeschlagenen Push, muss er von Hand nachgeholt
 werden, bevor die Session endet.
 
+**Gelernt wird auf Hermes.** Das Profil `engram` führt `/engram-learn` & Co. aus
+und pusht den Lernstand nach jedem Turn. Diese Claude-Code-Session hier ist für
+Setup-Arbeit da — Upstream-Merges, Refactorings, Änderungen an `.claude/`/`.hermes/`
+— nicht für den täglichen Lernpfad. Die Kommandos laufen trotzdem: Der Stop-Hook
+speichert weiterhin, jetzt als Rückfallweg (siehe `CLAUDE.md`).
+
 ## Die fünf Kommandos
 
 | Kommando | Wozu |
