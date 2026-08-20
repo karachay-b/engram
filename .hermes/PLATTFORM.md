@@ -142,7 +142,7 @@ Damit die Liste oben nicht als Freibrief gelesen wird — unverändert gültig s
 - der **Recherche-Baustein** mit Budget (6 Aufrufe) und den Belegstufen A/B,
 - die **Dialog-Grammatik** und die Trennung der Gewalten beim Bewerten,
 - **Quellen-Derivate bleiben privat** — nichts davon in den öffentlichen Fork,
-| **Pfade nie raten** — der echte Pfad steht in `engram.py doctor`, Feld `home`.
+- **Pfade nie raten** — der echte Pfad steht in `engram.py doctor`, Feld `home`.
 
 ## 7 · Windows-Spezifika (gemessen am 2026-08-20)
 
@@ -194,22 +194,35 @@ In MSYS-Bash normalisiert `cd … && pwd` jeden Pfad nach `/c/Users/...`. `git -
 scheitert, der State-Sync meldet „kein Git-Repo", `doctor` zeigt einen
 „kein Git-Repo"-Hinweis, und der Auto-Save schreibt nichts.
 
-**Patch in `.hermes/hooks/engram-env.sh`** — zwei Stellen, an denen
-`CDPATH= cd -- "$_x" 2>/dev/null && pwd` steht (Z. 36, 43, 72 in der
-Upstream-Fassung), ersetzen durch `cygpath -w "$_x"`. `cygpath` ist in jeder
-MSYS-Installation vorhanden und konvertiert sowohl `C:/...` als auch `/c/...`
-zuverlässig nach `C:\...`, mit dem `git -C` und `engram.py` problemlos
-arbeiten.
+**Behoben in `.hermes/hooks/engram-env.sh`, automatisch, kein manueller Patch
+mehr nötig.** Die Funktion `_engram_native_path()` entscheidet selbst: existiert
+`cygpath`, normalisiert sie darüber (`cygpath -w`); sonst fällt sie auf die
+portable `CDPATH= cd -- … && pwd`-Auflösung zurück, die vor diesem Abschnitt
+überall galt.
 
-**Bewusst NICHT angefasst:** `.claude/hooks/engram-env.sh` hat denselben Bug
-auf Windows, wird aber von Claude-Code-Cloudsessions gebraucht (die laufen
-unter Linux und sehen den Bug nie). Eine Änderung dort wäre eine
-Cloud-Container-Modifikation und gehört in deren Setup-Pfad.
+**Warum ein Gate zwingend ist, nicht Geschmackssache — gemessen am 2026-08-20:**
+Ein erster Anlauf hatte `cygpath -w` **ungated** eingesetzt, weil er auf genau
+diesem Windows-Host lief. `.hermes/hooks/engram-env.sh` ist aber die EINE
+Verdrahtung für jede Hermes-Desktop-Installation — macOS, Linux, Windows —, nicht
+nur für diesen einen Host. `cygpath` existiert ausschließlich unter MSYS/Cygwin;
+ungated brach der Aufruf mit „command not found" auf jedem anderen Host, die
+Kommandosubstitution lieferte leeren String, und der Resolver hielt ein
+vorhandenes Checkout für „nicht gefunden" — lautlos, denn ein leerer Pfad sieht
+für den Rest der Kette wie ein regulärer Fehlschlag aus, nicht wie ein Bug in der
+Auflösung selbst. Live gegen ein Linux-System geprüft: Vor dem Gate lieferte der
+Resolver `ENGRAM_ROOT=` und `ENGRAM_HOME=` leer, obwohl ein gültiges Checkout am
+Standardpfad lag; mit dem Gate löst er korrekt auf.
+
+`.claude/hooks/engram-env.sh` bleibt bewusst unverändert: Claude-Code-Cloudsessions
+laufen unter Linux und treffen den MSYS-Pfad nie. Der Gate-Mechanismus oben deckt
+das ohnehin ab, falls sich das je ändert — dort ist also nichts nachzuziehen,
+nicht weil es speziell ausgenommen wäre, sondern weil dieselbe Funktion dort gar
+nicht existiert und der Bug folglich auch nicht.
 
 ### 7.3 · Bootstrap zeigt `C:\…\engram-learning/learning`
 
-Aus der Kombination von 7.2 (`cygpath -w` für `ENGRAM_STATE`) und dem
-Resolver-Anhängsel `/learning` entsteht das gemischte Format
+Aus der Kombination von 7.2 (`cygpath -w` für `ENGRAM_STATE`, wenn vorhanden) und
+dem Resolver-Anhängsel `/learning` entsteht auf Windows das gemischte Format
 `C:\Users\andre\engram-learning/learning`. Funktional unbedenklich — `engram.py
 doctor` akzeptiert es, `os.path.join` macht daraus überall den gleichen Pfad.
 Wenn es stört, hilft ein `cygpath -w "$ENGRAM_STATE/learning"` direkt vor dem
@@ -227,4 +240,4 @@ auftauchen, ist es 7.1 + 7.2:
 3. Im State-Repo-Log taucht nach einer Lern-Session kein `engram (hermes):`-Commit
    auf, obwohl die Engine schreiben hätte müssen.
 
-Beheben in dieser Reihenfolge: 7.1 (Wrapper), 7.2 (Patches), 7.3 (kosmetisch).
+Beheben in dieser Reihenfolge: 7.1 (Wrapper), 7.2 (betrifft nur alte Checkouts vor diesem Gate — `git -C ~/engram pull` behebt es), 7.3 (kosmetisch).
