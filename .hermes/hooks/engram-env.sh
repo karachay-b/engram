@@ -66,23 +66,42 @@ if [ "${ENGRAM_HERMES:-}" != "1" ]; then
 fi
 export ENGRAM_HERMES
 
+# --- Pfadnormalisierung, plattformabhängig ------------------------------------
+# Windows/MSYS-Abweichung (gemessen 2026-08-20, siehe .hermes/PLATTFORM.md §7.2):
+# `CDPATH= cd -- … && pwd` liefert dort `/c/Users/...`, was `git -C` nicht
+# versteht (Exit 128). `cygpath -w` konvertiert zuverlässig nach `C:\Users\...`.
+#
+# `cygpath` existiert AUSSCHLIESSLICH unter MSYS/Cygwin — auf jedem macOS- oder
+# Linux-Host (also auch jedem Nicht-Windows-Hermes-Desktop und jedem
+# Linux-Container, der diese Datei zu Testzwecken sourct) gibt es den Befehl
+# nicht. Ungated bricht `cygpath -w` dort mit „command not found", die
+# Kommandosubstitution liefert leeren String, und der Resolver hält das für
+# „kein Checkout gefunden" — obwohl eins da ist. Genau das geschah hier, bevor
+# dieser Aufruf hinter `command -v cygpath` gestellt wurde: Diese Datei ist die
+# EINE Verdrahtung für jede Hermes-Desktop-Installation, nicht nur für Windows,
+# und ein host-spezifischer Fix ohne Gate bricht sie für jeden anderen Host.
+_engram_native_path() {  # $1 = Pfad; auf stdout der normalisierte Pfad, leer bei Fehler
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1" 2>/dev/null
+  else
+    (CDPATH= cd -- "$1" 2>/dev/null && pwd)
+  fi
+}
+
 # --- das engram-Checkout ------------------------------------------------------
 # Erster Treffer gewinnt. BASH_SOURCE steht weit vorn, weil es exakt ist, sobald
 # diese Datei über ihren Pfad gesourct wird — und Hermes ruft Hooks immer mit
 # absolutem Pfad auf (die Konfiguration verlangt es).
 ENGRAM_PROJECT=""
-# Windows/MSYS-Abweichung: pwd liefert /c/... was `git -C` nicht versteht
-# (exit 128). cygpath -w konvertiert zuverlässig in native Windows-Pfade,
-# mit denen git -C, engram.py und die Hooks problemlos arbeiten.
 for _p in "${ENGRAM_ROOT:-}" \
-          "$(cygpath -w "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null)" \
+          "$(_engram_native_path "$(dirname -- "${BASH_SOURCE[0]:-$0}")/../..")" \
           "$PWD" \
           "$(git rev-parse --show-toplevel 2>/dev/null)" \
           "$HOME/engram" \
           "/home/user/engram"; do
   [ -n "$_p" ] || continue
   if [ -f "$_p/scripts/engram.py" ]; then
-    ENGRAM_PROJECT="$(cygpath -w "$_p")"
+    ENGRAM_PROJECT="$(_engram_native_path "$_p")"
     break
   fi
 done
@@ -111,7 +130,7 @@ for _c in "${ENGRAM_STATE_REPO:-}" \
           "/home/user/engram-learning"; do
   [ -n "$_c" ] || continue
   if [ -d "$_c/.git" ]; then
-    ENGRAM_STATE="$(cygpath -w "$_c")"
+    ENGRAM_STATE="$(_engram_native_path "$_c")"
     break
   fi
 done

@@ -259,8 +259,21 @@ Drei Fallen:
   (ohne `-p engram`) darf dieser Schlüssel nicht stehen, sonst gilt er global.
 
 Danach Hermes neu starten (Desktop-App: beenden und öffnen, nicht nur das Fenster
-schließen). Die Desktop-App und die CLI teilen sich `~/.hermes` vollständig — was hier
-eingerichtet wird, gilt für beide.
+schließen). Die Desktop-App und die CLI teilen sich `~/.hermes` als Datenverzeichnis
+vollständig — was hier in `~/.hermes/profiles/engram/` eingerichtet wird, ist für
+beide sichtbar. **Das reicht aber nicht, um es auch zu benutzen:**
+
+**In der Desktop-App das Profil aktiv umschalten.** Die App öffnet nach dem
+Neustart nicht automatisch `engram` — sie behält das zuletzt aktive Profil (in
+der Regel das Standardprofil). Umschalten über die **Profil-Leiste in der
+Seitenleiste** (Profil `engram` anklicken) oder `⌘K` → Profil wechseln. Erst
+danach laufen `/engram-status` & Co. dort, wo die beiden Hooks tatsächlich
+registriert sind — im Standardprofil sind die Skills nicht einmal im Index,
+`/engram-status` würde dort schlicht nicht existieren, ohne dass irgendetwas
+eine Fehlermeldung zeigt.
+
+**Kontrollfrage, bevor es weitergeht:** Zeigt die Profil-Leiste `engram` als
+aktiv? Erst wenn ja, macht Schritt 5 unten überhaupt Sinn.
 
 ---
 
@@ -339,20 +352,36 @@ manuell gestarteten Terminal.
 Die Fähigkeit, für die sich der Umzug lohnt: eine Fälligkeits-Nudge aufs Handy,
 plus eine wöchentliche Gesundheitsmeldung, falls der Auto-Save je scheitert.
 
+**Die Reihenfolge unten ist zwingend, nicht nur naheliegend.** Cron-Jobs feuern
+NICHT, weil sie registriert sind — sie feuern, weil ein Gateway-Prozess läuft,
+der sie jede Minute abklopft. Weder die Desktop-App selbst noch `gateway setup`
+allein starten diesen Prozess; `gateway setup` registriert nur den Telegram-Bot.
+Ohne den Install-Schritt unten stehen die Jobs für immer registriert und feuern
+nie — und das sieht von außen genau wie „funktioniert, meldet aber nichts".
+
 ```bash
 hermes -p engram gateway setup                        # Telegram-Bot, interaktiv
+hermes -p engram gateway install                       # DEN TICKER als Dienst installieren
+hermes -p engram gateway start                          # und starten — ohne das: kein Tick, nie
 hermes -p engram cron create --no-agent \
   --script ~/engram/.hermes/hooks/session-start.sh \
   --deliver telegram --schedule "0 8 * * *"            # täglich 8 Uhr: Fälligkeiten
 hermes -p engram cron create --no-agent \
   --script ~/engram/.hermes/hooks/engram-health.sh \
   --deliver telegram --schedule "0 8 * * 1"             # montags 8 Uhr: Sync-Gesundheit
+hermes -p engram gateway status                          # muss "running" zeigen
 ```
 
 `session-start.sh` erkennt leeres stdin automatisch (Klartext-Modus, siehe die
 Kommentare am Kopf der Datei) und schweigt, wenn nichts fällig ist — der Cron
 verschickt dann einfach nichts. `engram-health.sh` verschickt grundsätzlich nur
 bei einer Abweichung.
+
+**Das Öffnen der Desktop-App ersetzt `gateway install`/`start` nicht.** Die
+Scheduler-Ticks laufen ausschließlich im separaten Gateway-Prozess, nicht im
+Chat-Fenster — offene Frage, in „Grenzen" unten festgehalten: ob dieser Prozess
+einen Neustart des Rechners übersteht, oder ob `gateway install` (statt nur
+`gateway start`) dafür nötig ist, ist plattformabhängig und hier nicht geprüft.
 
 **Nicht verifiziert.** Upstream markiert genau diese Art Cron-Zustellung
 (`--deliver telegram` an ein `--no-agent`-Skript) ausdrücklich als „not yet
@@ -441,6 +470,16 @@ Ehrlichkeit wird hier fortgeschrieben, nicht überschrieben.
   verhalten, ist ebenfalls nur gegen die Dokumentation geschrieben.** Kein Lauf
   gegen eine echte Installation lag vor. Schritt 1 und 6 tragen deshalb dasselbe
   Risiko wie der Cron-Teil oben.
+- **`gateway install` vs. `gateway start` — welches einen Neustart des Rechners
+  übersteht, ist plattformabhängig und hier nicht geprüft.** `install` richtet
+  laut Dokumentation einen systemd-/launchd-Dienst ein, `start` läuft nur
+  vordergründig für die Dauer der Shell-Sitzung. Feuert der Nudge nach dem
+  nächsten Neustart nicht mehr: `hermes -p engram gateway status` prüfen und
+  bei Bedarf `gateway install` nachholen.
+- **Die Profil-Leiste der Desktop-App (Schritt 4) ist ebenfalls nur gegen die
+  Dokumentation geschrieben**, nicht gegen eine laufende App gesehen. Zeigt die
+  Sidebar keine Profil-Leiste (ältere Desktop-Version?), bleibt der CLI-Weg
+  (`engram chat`, der Alias aus Schritt 1) der verlässliche Rückweg.
 
 Weiter:
 
