@@ -70,6 +70,15 @@ Erwartet wird eine Verdrahtung wie diese (die alte Fassung):
 **Die drei Pfadwerte notieren** — sie werden in Schritt 3 unverändert übernommen.
 Sieht es anders aus als beschrieben, das Abweichende melden und nicht raten.
 
+**Läuft dieser Rechner unter Windows (Git-Bash/MSYS)?** Dann vor Schritt 6
+(Verifikation) einmal `.hermes/PLATTFORM.md` §7 lesen. Zwei Host-Eigenheiten dort —
+ein Python-Store-Stub, der `python3` vortäuscht, aber nicht läuft, und `pwd`-Pfade,
+die `git -C` nicht versteht — sind seit dem letzten Update der Verdrahtung im Code
+selbst abgefangen (`ENGRAM_PY`/`_engram_native_path` in `engram-env.sh`), aber die
+Verifikationsbefehle unten laufen von Hand im Terminal und damit außerhalb dieser
+Absicherung. Wer §7 erst nach einem stillen Fehlschlag liest, hat die Ursache dann
+schon gesucht, statt sie vorher zu kennen.
+
 ## Schritt 2 · Das Engine-Repo aktualisieren
 
 ```bash
@@ -128,6 +137,14 @@ cp ~/engram/.hermes/SOUL.snippet.md ~/.hermes/profiles/engram/SOUL.md
 Es wird in jeder Session dieses Profils geladen, unabhängig vom Arbeitsverzeichnis,
 und trägt die drei bindenden Regeln. Existiert dort schon ein `SOUL.md`, **nicht
 überschreiben** — Inhalte zusammenführen und das melden.
+
+**In der Desktop-App das Profil aktiv umschalten.** Die App merkt sich das zuletzt
+aktive Profil (bisher: das Standardprofil) und öffnet nicht automatisch `engram`,
+nur weil es jetzt existiert. Umschalten über die **Profil-Leiste in der
+Seitenleiste** (Profil `engram` anklicken) oder `⌘K` → Profil wechseln. Ohne diesen
+Schritt läuft `/engram-status` weiterhin im Standardprofil, wo der Skill nicht
+einmal im Index steht — die Umstellung sähe komplett aus, würde aber nichts davon
+tatsächlich benutzen.
 
 ## Schritt 4 · Die alte globale Verdrahtung entfernen
 
@@ -231,8 +248,17 @@ Erwartet: **kein** Engram-Briefing, kein Nudge. Genau das war vorher kaputt.
 Die Fähigkeit, für die sich die Umstellung lohnt: FSRS steht und fällt damit, ob die
 Wiederholung täglich passiert.
 
+**Die Reihenfolge unten ist zwingend, nicht nur naheliegend.** Cron-Jobs feuern
+NICHT, weil sie registriert sind — sie feuern, weil ein Gateway-Prozess läuft, der
+sie jede Minute abklopft. `gateway setup` registriert nur den Telegram-Bot, startet
+aber keinen Dienst. Ohne den Install-Schritt unten stehen die Jobs für immer
+registriert und feuern nie — das sieht von außen genau wie „funktioniert, meldet
+aber nichts" aus.
+
 ```bash
 hermes -p engram gateway setup          # Telegram-Bot einrichten
+hermes -p engram gateway install        # DEN TICKER als Dienst installieren
+hermes -p engram gateway start          # und starten — ohne das: kein Tick, nie
 hermes -p engram cron create --no-agent \
   --script ~/engram/.hermes/hooks/session-start.sh \
   --deliver telegram --schedule "0 8 * * *"
@@ -240,11 +266,18 @@ hermes -p engram cron create --no-agent \
   --script ~/engram/.hermes/hooks/engram-health.sh \
   --deliver telegram --schedule "0 8 * * 1"
 hermes -p engram cron list
+hermes -p engram gateway status         # muss "running" zeigen
 ```
 
 Der erste Job schickt täglich um 8 Uhr „N Wiederholungen fällig" und **schweigt,
 wenn nichts fällig ist**. Der zweite meldet montags, falls der Lernstand von
 `origin/main` abweicht.
+
+**Das Öffnen der Desktop-App ersetzt `gateway install`/`start` nicht.** Die
+Scheduler-Ticks laufen ausschließlich im separaten Gateway-Prozess, nicht im
+Chat-Fenster — ob dieser Prozess einen Neustart des Rechners übersteht oder
+`gateway install` (statt nur `gateway start`) dafür nötig ist, ist
+plattformabhängig und hier nicht geprüft.
 
 Drei Dinge ehrlich dazu:
 

@@ -16,7 +16,7 @@ Absicherung dafür, das Profil die strukturelle.
 |---|---|
 | `UMSTELLUNG-HERMES.md` | **Läuft hier schon eine ältere Fassung?** Dann hier anfangen — Umstellung eines bestehenden Setups auf Profil, Riegel und Nudge |
 | `UEBERGABE-HERMES.md` | **Hier anfangen.** Der Einrichtungsauftrag, Schritt 1–7, mit Prüfungen |
-| `PLATTFORM.md` | die bindenden Übersetzungen Claude Code → Hermes (`delegate_task`, Marker-Datei, kein Artifact-Weg) |
+| `PLATTFORM.md` | die bindenden Übersetzungen Claude Code → Hermes (`delegate_task`, Marker-Datei, kein Artifact-Weg); §7 Windows-Spezifika |
 | `SOUL.snippet.md` | Vorlage für `~/.hermes/profiles/engram/SOUL.md` — Rolle + die drei bindenden Regeln, geladen unabhängig vom Arbeitsverzeichnis |
 | `config.snippet.yaml` | die Blöcke für `~/.hermes/profiles/engram/config.yaml`, inkl. `hooks_auto_accept` und der Cron-Kommandos für den Fälligkeits-Nudge aufs Handy |
 | `hooks/engram-env.sh` | gemeinsamer Resolver (Checkout + State-Repo) samt `ENGRAM_HERMES`-Riegel, von allen drei Hooks gesourct |

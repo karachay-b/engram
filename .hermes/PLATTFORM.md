@@ -185,6 +185,27 @@ chmod +x /c/Users/<DU>/bin/python3
 ausgeben, nicht die Microsoft-Store-Meldung. Dann
 `python3 "$ENGRAM_ROOT/scripts/engram.py" selftest` — muss `N/N` bestehen.
 
+**Für die automatische Verdrahtung selbst ist dieser Wrapper inzwischen nicht mehr
+nötig — die Hooks lösen den Interpreter jetzt selbst auf.** `_engram_python()` in
+`.hermes/hooks/engram-env.sh` prüft nicht nur, ob `python3` im PATH liegt
+(`command -v` findet den Store-Stub genauso wie eine echte Installation — das ist
+ja der ganze Bug), sondern ob ein `-c ''`-Testaufruf tatsächlich durchläuft. Bricht
+er, springt die Auflösung zu `py -3`, dem Windows-Python-Launcher — demselben
+Befehl, den der Wrapper oben ohnehin schon als zuverlässig nutzt — und exportiert
+das Ergebnis als `ENGRAM_PY`. `session-start.sh` und `engram-save.sh` rufen seither
+`$ENGRAM_PY` statt `python3` auf. Derselbe Fehlermodus wie beim `cygpath`-Bug in
+§7.2, hier von vornherein gegated: **kein Data-Loss-Risiko** — `git` selbst braucht
+kein Python, nur die Commit-Message verliert ohne funktionierendes Python ihre
+echten Zahlen und fällt auf einen generischen Text zurück.
+
+**Der Wrapper bleibt trotzdem sinnvoll — für alles, was NICHT über die Hooks
+läuft.** Die Verifikationsbefehle in `UEBERGABE-HERMES.md`/`UMSTELLUNG-HERMES.md`,
+die von Hand ins Terminal getippt werden (`python3 …/engram.py selftest` und
+ähnliche), laufen außerhalb von `engram-env.sh` und kennen `ENGRAM_PY` nicht — sie
+brauchen weiterhin ein funktionierendes `python3` im PATH. Wer den Wrapper aus
+diesem Grund entfernt, verliert nicht die automatische Verdrahtung, aber jede
+manuelle Prüfung im Terminal.
+
 ### 7.2 · `pwd` liefert MSYS-Pfade, `git -C` versteht sie nicht
 
 In MSYS-Bash normalisiert `cd … && pwd` jeden Pfad nach `/c/Users/...`. `git -C
