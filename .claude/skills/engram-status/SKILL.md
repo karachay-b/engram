@@ -72,12 +72,12 @@ genau die Vertraulichkeitsgrenze — und läuft, wie `engram_source.py selftest`
 **Nur Metadaten auf die Seite.** Titel, Seitenzahl, Chunkzahl, Themenname, Fortschritt,
 Fälligkeitsdatum sind unbedenklich. **Niemals**: Chunk-Text, wörtliche Zitate aus einem
 Buch, Freitext-Antworten des Lernenden, Misconception-Wortlaut. Das Werkzeug hält
-Probe/Claim/Rubrik/Transferitem strukturell aus der Ausgabe heraus; diese Regel gilt
-zusätzlich für das, was das Modell selbst formuliert — allen voran das `goal`-Feld
-(Freitext des Lernenden): sinngemäß kürzen, keine Namen oder Termine Dritter wörtlich
-wiedergeben. `engram-source/SKILL.md` verbietet Buch-Derivate in einer Artifact-Seite
-ausdrücklich — das gilt hier identisch, weil eine Artifact-URL potenziell teilbar ist
-und das State-Repo privat ist.
+Probe/Claim/Rubrik/Transferitem strukturell aus der Ausgabe heraus; das `goal`-Feld
+(Freitext des Lernenden, potenziell mit Namen oder Termine Dritter) kürzt es ebenso per
+Code auf ~120 Zeichen (`shorten_goal()`/`GOAL_MAX_CHARS` in `engram_status.py`) — nicht
+erst auf Modell-Disziplin verlassen. `engram-source/SKILL.md` verbietet Buch-Derivate in
+einer Artifact-Seite ausdrücklich — das gilt hier identisch, weil eine Artifact-URL
+potenziell teilbar ist und das State-Repo privat ist.
 
 ## Seite bauen
 
@@ -85,8 +85,11 @@ Nur wenn gewünscht (siehe oben). Denselben Bootstrap-Block noch einmal ausführ
 ohne `--text` (liefert JSON):
 
 ```bash
-python3 "$ENGRAM_ROOT/.claude/tools/engram_status.py" > /tmp/engram-status.json
+python3 "$ENGRAM_ROOT/.claude/tools/engram_status.py" > "$ENGRAM_STATUS_TMP"
 ```
+
+(`$ENGRAM_STATUS_TMP` = eine temporäre Datei im Scratchpad-Verzeichnis der Session,
+nicht `/tmp` — das entspricht der Umgebungskonvention für Cloud-Sessions.)
 
 **Vor dem Schreiben den `artifact-design`-Skill laden** (Pflicht, wie bei jedem
 Artifact). Publizieren mit dem `Artifact`-Tool, `favicon` z. B. 🧭. Ohne vorherige

@@ -33,6 +33,19 @@ TOOL_VERSION = "engram-status 1.0"
 # rekursiv nach genau diesen Schlüsseln, statt nur der Erlaubnisliste zu vertrauen.
 FORBIDDEN_KEYS = {"probe", "claim", "rubric", "transfer_probe"}
 
+# `goal` ist erlaubtes Freitext-Feld (kein FORBIDDEN_KEY) — aber es ist der Text
+# des Lernenden und kann Namen oder Termine Dritter enthalten, die auf einer
+# teilbaren Artifact-Seite nichts verloren haben. Deshalb hier gekürzt, nicht
+# entfernt: dieselbe Vertraulichkeitsgrenze, die probe/claim/rubric per Code statt
+# per Modell-Disziplin durchsetzt (siehe FORBIDDEN_KEYS oben).
+GOAL_MAX_CHARS = 120
+
+
+def shorten_goal(text):
+    if not text or len(text) <= GOAL_MAX_CHARS:
+        return text
+    return text[:GOAL_MAX_CHARS].rstrip() + "…"
+
 # Dieses Skript liegt neben engram_source.py — resolve_state(), sources_dir() und
 # der MAP.md-Parser (read_map) werden von dort importiert statt zweimal geschrieben.
 # Ein zweiter, selbst gebauter Pfad-Resolver ist genau der Fehler, den
@@ -297,8 +310,8 @@ def collect_sources(state):
         except Exception:
             continue
         title_f = _fold(m.get("title", ""))
-        raw_available = bool(title_f) and any(title_f in ff or ff in title_f
-                                              for _, ff in raw_folded)
+        raw_available = bool(title_f) and any(
+            ff and (title_f in ff or ff in title_f) for _, ff in raw_folded)
         out.append({
             "slug": slug,
             "title": m.get("title"),
@@ -325,13 +338,28 @@ def collect(state, engram_root, horizon_days):
     due_raw = run_engine(engram_root, home, "due") if engram_root else None
     engine_mod = try_import_engine(engram_root) if engram_root else None
 
+    # Jeder der drei Aufrufe kann unabhängig scheitern (engram.py nicht gefunden,
+    # Prozessfehler, kaputtes JSON) — None heißt "nicht befragbar", nicht "leer".
+    # Einzeln geprüft, statt nur an topics_raw aufzuhängen: scheiterte früher nur
+    # `due` oder `stats`, blieb due_out leer und die Textausgabe meldete "FÄLLIG:
+    # nichts" — ein Fehler sah aus wie ein leerer Kalender.
+    due_failed = due_raw is None
+    stats_failed = stats is None
     if topics_raw is None:
-        note("Engine nicht befragbar (engram.py nicht gefunden oder Fehler) — "
-             "topics/stats/due bleiben leer, nicht 'nichts fällig'.")
-        topics_raw, due_raw = [], []
+        note("`topics` nicht befragbar (engram.py nicht gefunden oder Fehler) — "
+             "Lernpfade bleiben leer, nicht 'keine Themen'.")
+        topics_raw = []
+    if due_failed:
+        note("`due` nicht befragbar (engram.py nicht gefunden oder Fehler) — "
+             "FÄLLIG bleibt leer, nicht 'nichts fällig'.")
+        due_raw = []
+    if stats_failed:
+        note("`stats` nicht befragbar (engram.py nicht gefunden oder Fehler) — "
+             "fällig-heute/Streak/Tage seit letzter Session bleiben unbekannt (?).")
 
     topics_out = [{
-        "topic": t.get("topic"), "title": t.get("title"), "goal": t.get("goal"),
+        "topic": t.get("topic"), "title": t.get("title"),
+        "goal": shorten_goal(t.get("goal")),
         "nodes": t.get("nodes"), "states": t.get("states"), "due": t.get("due"),
     } for t in topics_raw]
 
@@ -363,19 +391,34 @@ def collect(state, engram_root, horizon_days):
         "open_misconceptions": (stats or {}).get("misconceptions_open"),
         "grader_unaudited": bool(((stats or {}).get("grader_health") or {})
                                  .get("audited") is False),
+        # Auf dem UNGEKÜRZTEN goal aus topics_raw geprüft, nicht auf topics_out
+        # (dessen "goal" shorten_goal() durchlaufen hat, siehe GOAL_MAX_CHARS
+        # oben) — ein Datum jenseits von Zeichen 120 darf hier nicht durch die
+        # Kürzung verschwinden.
         "goal_date_passed": goal_dates_passed(
-            [("thema:%s" % t["topic"], t.get("goal")) for t in topics_out]
+            [("thema:%s" % t.get("topic"), t.get("goal")) for t in topics_raw]
             + [("ziel:%d" % i, g) for i, g in enumerate(model.get("goals") or [])],
             today),
         "commitment_stale": commitment_stale(model, today),
     }
 
     sess = adherence.get("return", {}) or {}
+    # due_now: `stats.due_now` bevorzugt, sonst die echte Zählung aus `due` —
+    # aber NUR, wenn `due` tatsächlich gelaufen ist. Scheiterten beide (stats
+    # UND due), bliebe ein blindes `len(due_out)` bei 0 hängen, weil due_raw
+    # oben auf [] gesetzt wurde — das sähe wie "nichts fällig" aus, ist aber
+    # "unbekannt". Deshalb explizit None, wenn keine der beiden Quellen trägt.
+    if stats and "due_now" in stats:
+        due_now = stats["due_now"]
+    elif not due_failed:
+        due_now = len(due_out)
+    else:
+        due_now = None
     totals = {
         "topics": len(topics_out),
         "concepts": sum(t.get("nodes") or 0 for t in topics_out),
         "sources": None,  # unten nach dem Einsammeln der Quellen gesetzt
-        "due_now": (stats or {}).get("due_now", len(due_out)),
+        "due_now": due_now,
         "receipts": (stats or {}).get("receipts"),
         "streak_days": (stats or {}).get("streak_days"),
         "days_since_last_session": sess.get("days_since_last_session"),
@@ -408,11 +451,13 @@ STATE_LABEL = {"review": "behalten", "learning": "im Lernen", "new": "unberührt
 def format_text(data):
     lines = []
     t = data["totals"]
+    due_now_disp = "?" if t["due_now"] is None else t["due_now"]
+    days_disp = "?" if t["days_since_last_session"] is None else t["days_since_last_session"]
     lines.append("engram-status · %s" % data["generated"])
     lines.append("Themen: %s (%s Konzepte) · Quellen: %s · fällig heute: %s · "
                  "seit letzter Session: %s Tag(e)"
-                 % (t["topics"], t["concepts"], t["sources"], t["due_now"],
-                    t["days_since_last_session"]))
+                 % (t["topics"], t["concepts"], t["sources"], due_now_disp,
+                    days_disp))
     lines.append("")
 
     if data["due"]:
@@ -496,8 +541,10 @@ def _fixture_engine():
 
 def cmd_selftest(_args):
     failures = []
+    checked = [0]
 
     def check(name, ok, detail=""):
+        checked[0] += 1
         if not ok:
             failures.append((name, detail))
 
@@ -572,7 +619,42 @@ def cmd_selftest(_args):
                                     "set": "2026-08-01", "renewed": ["2026-08-17"]}}}, today)
     check("commitment_stale: erneuert löst nicht aus", fresh is None)
 
-    total = 11
+    # 12: due_now/days_since_last_session als "?" gerendert, wenn unbekannt (None) —
+    # nicht als "None" oder als 0, das wie ein leerer Kalender aussähe.
+    text_data = {
+        "generated": "t", "totals": {"topics": 0, "concepts": 0, "sources": 0,
+                                     "due_now": None, "days_since_last_session": None},
+        "due": [], "forecast": [], "topics": [], "sources": [], "flags": {
+            "loop_never_closed": False, "loop_closure": {}, "open_misconceptions": 0,
+            "grader_unaudited": False, "goal_date_passed": [], "commitment_stale": None,
+        },
+    }
+    rendered = format_text(text_data)
+    summary_line = rendered.splitlines()[1] if len(rendered.splitlines()) > 1 else rendered
+    check("format_text: due_now/days None als '?' gerendert",
+         "fällig heute: ? ·" in summary_line and "seit letzter Session: ? Tag(e)" in summary_line,
+         summary_line)
+
+    # 13: collect_sources faltet einen leeren sources_raw-Dateinamen NICHT zu
+    # einem Treffer für jeden Titel (leerer String ist sonst Teilstring von allem,
+    # `raw_available` würde für jede Quelle fälschlich True).
+    title_f = _fold("Ein echter Buchtitel")
+    raw_folded = [("____.pdf", _fold("____.pdf"))]  # faltet zu ""
+    raw_available = bool(title_f) and any(
+        ff and (title_f in ff or ff in title_f) for _, ff in raw_folded)
+    check("collect_sources: leerer Fold löst kein raw_available aus",
+         raw_available is False)
+
+    # 14: shorten_goal kürzt lange Freitexte, lässt kurze unangetastet
+    long_goal = "x" * 200
+    check("shorten_goal: kürzt auf GOAL_MAX_CHARS + Ellipse",
+         len(shorten_goal(long_goal)) == GOAL_MAX_CHARS + 1
+         and shorten_goal(long_goal).endswith("…"))
+    check("shorten_goal: kurzer Text bleibt unverändert",
+         shorten_goal("kurzes Ziel") == "kurzes Ziel")
+    check("shorten_goal: None bleibt None", shorten_goal(None) is None)
+
+    total = checked[0]
     for name, detail in failures:
         sys.stderr.write("FAIL  %s%s\n" % (name, (": %s" % detail) if detail else ""))
     print("%d/%d Fixtures bestanden" % (total - len(failures), total))

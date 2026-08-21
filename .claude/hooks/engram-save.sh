@@ -43,9 +43,12 @@ if [ -z "$(git status --porcelain -- $PATHS 2>/dev/null)" ]; then
   exit 0
 fi
 
-# Das EINZIGE, was den Commit verhindern darf: ein laufender Rebase/Merge. Dann
-# löst gerade ein Mensch einen Konflikt auf, und ein `git commit` mitten hinein
-# zerstört die halbfertige Auflösung.
+# Zwei Dinge dürfen den Commit verhindern: ein laufender Rebase/Merge (dieser
+# Guard) und eine erkannte Löschung (weiter unten, eigener Guard). Sonst nichts
+# — der Normalfall ist, dass die Engine nur ändert oder ergänzt.
+#
+# Rebase/Merge zuerst: Dann löst gerade ein Mensch einen Konflikt auf, und ein
+# `git commit` mitten hinein zerstört die halbfertige Auflösung.
 #
 # Bewusst NICHT übernommen aus der Hermes-Fassung: deren Prüfung auf
 # `branch == main`. Dort ist sie richtig — auf dem Desktop kontrolliert der Nutzer
@@ -95,6 +98,22 @@ except Exception:
 if [ -d "$ENGRAM_STATE/sources" ]; then
   N_SRC="$(find "$ENGRAM_STATE/sources" -mindepth 2 -maxdepth 2 -name source.json 2>/dev/null | wc -l | tr -d ' ')"
   [ "${N_SRC:-0}" -gt 0 ] && SUMMARY="$SUMMARY, $N_SRC Quellen"
+fi
+
+# Löschungs-Wächter. Vorfall 2026-08-20 (Commit 88954cd): eine lokale Löschung
+# unbekannter Ursache wurde vom routinemäßigen Sichern kommentarlos nach
+# origin/main gepusht — stiller Datenverlust. Ein Fund hier heißt NICHT
+# committen, sondern die Pfade laut auflisten und auf manuelle Prüfung
+# verweisen; der Normalfall (Engine ändert/ergänzt nur) bleibt unberührt, weil
+# `D` in der Statusspalte nur bei einer echten Löschung auftaucht. Läuft nach
+# dem Rebase/Merge-Guard und vor `git add -A`, damit die Löschung noch
+# ungestaged ist, wenn sie gemeldet wird.
+DELETED="$(git status --porcelain -- $PATHS 2>/dev/null | grep -E '^.D|^D.' || true)"
+if [ -n "$DELETED" ]; then
+  echo "engram: Lernstand NICHT committet — gelöschte Pfade erkannt:"
+  echo "$DELETED"
+  echo "engram: Absichtlich? Von Hand committen und pushen. Sonst: git -C \"$ENGRAM_STATE\" checkout -- <Pfad>."
+  exit 0
 fi
 
 git add -A -- $PATHS >/dev/null 2>&1
