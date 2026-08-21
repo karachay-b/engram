@@ -71,6 +71,20 @@ if [ -d "$ENGRAM_STATE/sources" ]; then
   [ "${N_SRC:-0}" -gt 0 ] && SUMMARY="$SUMMARY, $N_SRC Quellen"
 fi
 
+# Löschungs-Wächter, analog zur Claude-Fassung (.claude/hooks/engram-save.sh).
+# Vorfall 2026-08-20 (Commit 88954cd): eine lokale Löschung unbekannter Ursache
+# wurde vom routinemäßigen Sichern kommentarlos nach origin/main gepusht —
+# stiller Datenverlust. Ein Fund hier heißt NICHT committen, sondern die Pfade
+# laut auf stderr auflisten und auf manuelle Prüfung verweisen; der Normalfall
+# (Engine ändert/ergänzt nur) bleibt unberührt.
+DELETED="$(git -C "$ENGRAM_STATE" status --porcelain -- $PATHS 2>/dev/null | grep -E '^.D|^D.' || true)"
+if [ -n "$DELETED" ]; then
+  say "engram: Lernstand NICHT committet — gelöschte Pfade erkannt:"
+  say "$DELETED"
+  say "engram: Absichtlich? Von Hand committen und pushen. Sonst: git -C \"$ENGRAM_STATE\" checkout -- <Pfad>."
+  done_
+fi
+
 git -C "$ENGRAM_STATE" add -A -- $PATHS >/dev/null 2>&1
 git -C "$ENGRAM_STATE" commit -q -m "engram (hermes): $SUMMARY" >/dev/null 2>&1 || done_
 

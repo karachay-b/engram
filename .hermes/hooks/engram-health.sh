@@ -23,7 +23,10 @@ HOOK_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" 2>/dev/null &&
 . "$HOOK_DIR/engram-env.sh" 2>/dev/null || exit 0
 
 [ -n "${ENGRAM_STATE:-}" ] || { echo "engram: Gesundheitscheck — kein State-Repo gefunden."; exit 0; }
-[ -d "$ENGRAM_STATE/.git" ] || exit 0
+# `-e` statt `-d`: in einem Git-Worktree ist `.git` eine Datei, keine
+# Verzeichnis — `resolve_state()` akzeptiert Worktrees ausdrücklich, dieser
+# Check soll sie nicht stillschweigend ausschließen.
+[ -e "$ENGRAM_STATE/.git" ] || exit 0
 
 STATUS="$(git -C "$ENGRAM_STATE" status --porcelain 2>/dev/null)"
 AHEAD="$(git -C "$ENGRAM_STATE" rev-list --count origin/main..HEAD 2>/dev/null || echo 0)"
