@@ -1227,7 +1227,10 @@ def cmd_add(args):
 
     root, rows = write_source(state, slug, meta, doc, spans, sections, path,
                               args.keep_pdf)
-    if temp and not args.keep_pdf:
+    # write_source() hat das Original bei --keep-pdf schon nach <slug>/pdf/
+    # kopiert — die Temp-Datei in /tmp wird in JEDEM Fall gelöscht, sonst bleibt
+    # sie beim URL-Download mit --keep-pdf liegen.
+    if temp:
         os.unlink(path)
 
     idx = os.path.join(root, "index.md")
@@ -1773,8 +1776,12 @@ def cmd_map_add(args):
 
     # Schlüssel ist (Thema, Quelle) — NICHT die ganze Zeile. Ein Vergleich, der das
     # Datum einschließt, hält dieselbe Zuordnung morgen für eine neue.
-    if any(r["chunks"] == chunks for r in hit):
-        note("steht schon in MAP.md: %s" % hit[0]["line"].strip())
+    same = [r for r in hit if r["chunks"] == chunks]
+    if same:
+        # Bei mehreren Altzeilen desselben (Thema, Quelle)-Paars die zitieren, deren
+        # chunks tatsächlich übereinstimmen — nicht pauschal hit[0], das bei
+        # abweichenden Chunk-Angaben unter denselben Schlüsseln die falsche Zeile nennt.
+        note("steht schon in MAP.md: %s" % same[0]["line"].strip())
         return
     if hit and not args.replace:
         die("%s ↔ %s steht schon mit anderer Chunk-Angabe in MAP.md:\n  %s\n"
