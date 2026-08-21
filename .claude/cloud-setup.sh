@@ -78,6 +78,7 @@ cat > "$NEW" <<'JSON'
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup|resume|clear",
         "hooks": [
           {
             "type": "command",
@@ -93,7 +94,7 @@ cat > "$NEW" <<'JSON'
           {
             "type": "command",
             "command": "bash /root/.claude/engram-hook.sh engram-save.sh",
-            "timeout": 60
+            "timeout": 120
           }
         ]
       }
@@ -107,9 +108,17 @@ JSON
 # `jq '.[0] * .[1]'` täte das NICHT: Der Multiplikations-Operator verschmilzt zwar
 # Objekte rekursiv, ersetzt Arrays aber komplett. Ein bereits eingetragener
 # SessionStart- oder Stop-Hook — etwa aus einem anderen Setup derselben Umgebung —
-# verschwände damit wortlos. Deshalb werden die Arrays pro Event aneinandergehängt
-# und dabei entdoppelt, damit ein zweiter Lauf des Setup-Skripts den Engram-Eintrag
-# nicht verdoppelt.
+# verschwände damit wortlos. Deshalb werden die Arrays pro Event aneinandergehängt.
+#
+# Reines `unique_by(tojson)` reicht dafür NICHT: Es dedupliziert nur exakt
+# gleiche Einträge. Ändert sich an einem Engram-Eintrag etwas anderes als der
+# Befehl selbst — z.B. der `matcher` oder ein `timeout` —, bekäme der neue
+# Eintrag einen anderen JSON-Fingerabdruck als der alte und beide blieben nebeneinander
+# stehen, sobald ein alter Cache-Snapshot die Vorgängerfassung schon enthält. Ein alter
+# `command`-Wert identifiziert denselben Engram-Hook eindeutig — deshalb ersetzt
+# `merge_event` Alteinträge mit demselben `command` durch den neuen, statt nur zu
+# deduplizieren; `unique_by(tojson)` am Ende bleibt als reine Absicherung gegen
+# einen Doppellauf mit identischem Ergebnis.
 if [ ! -s "$CLAUDE_DIR/settings.json" ]; then
   cp "$NEW" "$CLAUDE_DIR/settings.json"
 elif ! command -v jq >/dev/null 2>&1; then
@@ -124,7 +133,12 @@ elif ! jq empty "$CLAUDE_DIR/settings.json" 2>/dev/null; then
 else
   if jq -s '
         def merge_event($old; $new):
-          (($old // []) + ($new // [])) | unique_by(tojson);
+          ($new // []) as $newarr
+          | [$newarr[].hooks[]?.command] as $new_cmds
+          | (($old // []) | map(select(
+              ([.hooks[]?.command] | any(. as $x | $new_cmds | index($x) != null)) | not
+            ))) as $kept_old
+          | ($kept_old + $newarr) | unique_by(tojson);
         .[0] as $a | .[1] as $b
         | $a
         | .hooks = (($a.hooks // {}) + ($b.hooks // {}))
