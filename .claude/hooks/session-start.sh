@@ -51,6 +51,15 @@ command -v python3 >/dev/null 2>&1 || {
 [ -f "$ENGRAM_PROJECT/.claude/ORIENTIERUNG.md" ] && cat "$ENGRAM_PROJECT/.claude/ORIENTIERUNG.md"
 
 # --- 1. state location --------------------------------------------------------
+# ENGRAM_ROOT geht mit hinaus, nicht nur ENGRAM_HOME: Es ist der Notausgang, auf
+# den der unveränderte Upstream-Resolver (skills/learn/SKILL.md) und
+# resolve_engram_root() in engram_status.py anspringen. Ohne diese Zeile bleibt
+# es in der Bash-Umgebung der Session leer, bis der Bootstrap-Block eines Alias-
+# Skills es selbst setzt — der Block bleibt trotzdem Pflicht (er trägt die
+# Hook-Warnung, siehe CLAUDE.md), das hier macht ihn nur redundant statt nötig.
+if [ -n "$ENGRAM_PROJECT" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  echo "export ENGRAM_ROOT=\"$ENGRAM_PROJECT\"" >> "$CLAUDE_ENV_FILE"
+fi
 if [ -n "$ENGRAM_STATE" ]; then
   mkdir -p "$ENGRAM_HOME" 2>/dev/null
   export ENGRAM_HOME
@@ -60,6 +69,38 @@ else
   # would do the work and lose the schedule that work was for.
   echo "engram: WARNUNG — das private State-Repo (engram-learning) ist dieser Session nicht angehängt."
   echo "engram: Der Lernstand liegt nur im Container und ist nach dessen Ablauf weg. Siehe CLAUDE.md."
+fi
+
+# --- 1b. state repo pull (Symmetrie zu Hermes) ---------------------------------
+# Hermes pullt den Lernstand bei Sessionstart (.hermes/hooks/session-start.sh)
+# und pusht nach jedem Turn; diese Fassung pushte bisher nur (Stop-Hook), pullte
+# nie. Beim Container-Start ist das egal (frischer Clone), aber bei einer
+# RESUMED Session im selben Container kann die Engine sonst einen Stand lesen,
+# den Hermes längst überholt hat — die Divergenz fällt erst beim nächsten Push
+# auf, dann als Ablehnung, die der Stop-Hook selbst behebt, aber erst nach einer
+# vollen Session mit veraltetem Stand im Kontext.
+#
+# Bewusst OHNE die Branch-main-Prüfung aus engram_state_sync_ok() — die ist eine
+# Hermes-Eigenschaft (siehe CLAUDE.md, Begründung wie im Stop-Hook: das
+# Cloud-Environment vergibt dem State-Repo hier so gut wie nie 'main'). Ein
+# laufender Rebase/Merge bleibt die einzige Bedingung, die den Pull überspringt
+# — dort steckt sonst möglicherweise ein Mensch mitten in einer
+# Konfliktauflösung, in die ein automatischer Pull nicht hineinfahren darf.
+if [ -n "$ENGRAM_STATE" ]; then
+  _gd="$(git -C "$ENGRAM_STATE" rev-parse --git-dir 2>/dev/null)"
+  if [ -n "$_gd" ]; then
+    case "$_gd" in /*) ;; *) _gd="$ENGRAM_STATE/$_gd" ;; esac
+    if [ -d "$_gd/rebase-merge" ] || [ -d "$_gd/rebase-apply" ] || [ -f "$_gd/MERGE_HEAD" ]; then
+      echo "engram: State-Repo-Pull übersprungen — im State-Repo läuft ein Rebase/Merge."
+    elif git -C "$ENGRAM_STATE" remote get-url origin >/dev/null 2>&1; then
+      if ! git -C "$ENGRAM_STATE" pull --rebase --autostash origin main >/dev/null 2>&1; then
+        git -C "$ENGRAM_STATE" rebase --abort >/dev/null 2>&1 || true
+        echo "engram: WARNUNG — \`git pull --rebase origin main\` im State-Repo ist fehlgeschlagen (Rebase zurückgerollt)."
+        echo "engram: Der lokale Stand ist unversehrt, kennt aber die Commits vom Remote nicht. Von Hand: git -C \"$ENGRAM_STATE\" pull --rebase origin main"
+      fi
+    fi
+  fi
+  unset _gd
 fi
 
 # --- 2./3. init + due nudge ---------------------------------------------------
