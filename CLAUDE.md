@@ -44,14 +44,27 @@ nach Git gepusht wird.
   **Nie `~/.claude/learning` wörtlich ausgeben** — hier stimmt das nicht.
 
 Der Stop-Hook (`.claude/hooks/engram-save.sh`) committet und pusht automatisch
-nach jedem Turn, fest nach `main` (nicht mehr den aktuellen Branch) — seit dem
-Umzug der Lernarbeit nach Hermes ist das der Rückfallweg, falls doch einmal in
-einer Claude-Session Lernstand entsteht, nicht mehr der Hauptschreiber. Er
-verweigert das automatische Pushen, wenn das State-Repo nicht auf `main` steht
-oder mitten in einem Rebase/Merge hängt (`engram_state_sync_ok()` in der Datei
-selbst) — dann liegt der Stand unversehrt im Arbeitsbaum, aber ungepusht. Meldet
-er einen fehlgeschlagenen Push, muss der Push manuell nachgeholt werden, bevor die
-Session endet.
+nach jedem Turn, fest nach `HEAD:main` (nicht nach dem aktuellen Branch) — seit
+dem Umzug der Lernarbeit nach Hermes ist das der Rückfallweg, falls doch einmal
+in einer Claude-Session Lernstand entsteht, nicht mehr der Hauptschreiber. Er
+committet immer, außer wenn im State-Repo gerade ein Rebase/Merge läuft — dann
+liegt der Stand unversehrt im Arbeitsbaum, aber ungepusht, bis ein Mensch die
+Konfliktauflösung abgeschlossen hat. Eine Prüfung auf den Branch des State-Repos
+macht der Claude-Hook bewusst **nicht** (anders als die Hermes-Fassung, siehe
+unten): In Claude Code on the web spiegelt die Umgebung den Namen des
+Code-Branches auf das State-Repo, dort stünde also so gut wie nie `main` — eine
+Branch-Prüfung würde den Push praktisch immer verweigern. Wird der Push
+abgelehnt (typischerweise, weil Hermes inzwischen gepusht hat), rebased der Hook
+genau einmal gegen `origin/main` und versucht den Push erneut; scheitert auch
+das, bleibt der Lernstand committet, aber ungepusht, und der Hook meldet es.
+Meldet er einen endgültig gescheiterten Push, muss der Push manuell nachgeholt
+werden, bevor die Session endet.
+
+`engram_state_sync_ok()` — samt der Prüfung auf Branch `main` — gibt es nur in
+`.hermes/hooks/engram-env.sh`; das ist eine **Hermes**-Eigenschaft, keine des
+Claude-Hooks (dort ist die Prüfung richtig, weil ein Mensch am Desktop das
+Checkout kontrolliert und ein Nebenbranch dort einen Grund hat, den der Hook
+nicht kennt).
 
 ### Hooks laufen nicht in jeder Session
 
