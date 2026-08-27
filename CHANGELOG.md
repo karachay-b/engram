@@ -43,6 +43,20 @@ coverage lives in the vitest waterfall suite, which gained one test).
 
 **Docs & verification honesty**
 
+- **Gates run for this release:** selftest 315/315 after bump; every new check
+  mutation-tested (3/3 red when broken); two-agent adversarial review — both MEDIUMs
+  killed at the class level (the two-entry hook draft of this very branch died here);
+  fuzz extended with three read paths its own dispatch-table enumeration had missed,
+  600 states × 24600 calls, CRASHES=0; full engine live-drive including the read-only
+  real-state hash gate; uncontaminated architect + artifact-smith dogfood on the release
+  tree with an independent contract audit of the built explorable; §5.7 omni-repo gate
+  answered by a clean Claude Code persona over the shipped skill files (resolution,
+  spawn mechanics, foreign-reference inventory all correct).
+- **§5.6 user session: WAIVED by the maintainer's explicit decision for this glue-only
+  port** (engine untouched beyond a version pin). The standing honest note applies:
+  until a real ZCode session lands, this platform's learn-loop behavior is
+  high-confidence-but-unexercised — [INSTALL-ZCODE.md](INSTALL-ZCODE.md) says so in
+  place, and first-run reports are explicitly requested.
 - **[INSTALL-ZCODE.md](INSTALL-ZCODE.md)** — marketplace route (Settings → Discover)
   and clone+symlink route (`~/.agents/skills` shared with dsh), the config-file hook
   block with its mandatory `enabled: true` and explicit `ENGRAM_HOOK_FORMAT=json`,
