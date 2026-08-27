@@ -21,7 +21,14 @@ const root = resolve(__dirname, "..")
  *  repeating this. The anchor is the loop BODY, not the `for d in …` line:
  *  the first candidate legitimately changes per port (ZCode now leads), so
  *  pinning the literal first candidate would break discovery every time one
- *  is added — the v1.14.0+ ZCode port found exactly that trap by failing it. */
+ *  is added — the v1.15.0 ZCode port found exactly that trap by failing it.
+ *
+ *  CONVENTION this encodes, so a future port does not lose coverage: every
+ *  waterfall copy must resolve the engine through a loop whose body contains
+ *  the exact string `[ -f "$d/scripts/engram.py" ]` and lives under skills/
+ *  or agents/. A differently-spelled guard (an intermediate variable, `-x`,
+ *  etc.) needs its own discovered file or it ships unasserted — see the
+ *  codex/agents/*.toml twins, which live outside both dirs for that reason. */
 function waterfallFiles(): string[] {
   const { execSync } = require("node:child_process")
   const out = execSync('grep -rlF \'[ -f "$d/scripts/engram.py" ]\' skills agents', { cwd: root, encoding: "utf-8" })

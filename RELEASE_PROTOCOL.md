@@ -636,7 +636,7 @@ release.**
 
 ## 5.7 · The omni-repo gate ⚠ NEW — required when a release adds or changes a PLATFORM
 
-`skills/` is shared verbatim by six platforms. Every word added to a SKILL.md for the platform
+`skills/` is shared verbatim by nine platforms. Every word added to a SKILL.md for the platform
 you are porting is also read, that same session, by the five you are not. v1.0.8 learned both
 halves of this the hard way, and neither showed up in any test that existed.
 

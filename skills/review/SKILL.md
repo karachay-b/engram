@@ -32,7 +32,7 @@ fi                                  # which dumps a python usage error at the le
 
 If none are set, resolve the plugin root as the directory containing `.zcode-plugin/plugin.json`, `.claude-plugin/plugin.json`, or `.codex-plugin/plugin.json`. **Never inline a learner's answer into a shell command** — pass productions via `--production-file` (or `--production-file -` on stdin); a stray quote or `$(…)` in what they typed would otherwise execute.
 
-**Spawning agents.** "Spawn **engram-…**" means a *fresh-context* child running that agent's definition — via your platform's subagent/Task tool (the type may be namespaced, e.g. `engram:engram-assessor`). **If your only mechanism is a generic `sessions_spawn` — or you have no spawn tool at all (Pi) — read `skills/_shared/subagents.md` first.**
+**Spawning agents.** "Spawn **engram-…**" means a *fresh-context* child running that agent's definition — via your platform's subagent/Task tool (the type may be namespaced, e.g. `engram:engram-assessor`). **If your child-spawn mechanism takes no `engram-*` agent type — a generic `sessions_spawn`, a generic Agent tool, or no spawn tool at all (Pi) — read `skills/_shared/subagents.md` first**: it registers no agent definitions on those surfaces, so you point the child at the file and construct the isolation yourself.
 
 ## 1 · Load the queue
 

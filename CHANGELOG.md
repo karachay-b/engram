@@ -3,9 +3,9 @@
 ## 1.15.0 — 2026-08-27 · the ninth platform (ZCode)
 
 ZCode's extension model is Claude Code-compatible by construction, so this is the
-thinnest port since dsh — three files of glue, no adapter code, engine untouched except
-an extended version pin (selftest 315 -> 315 checks; candidate-nine coverage lives in
-the vitest waterfall suite, 230 -> 232).
+thinnest port since dsh — four functional files of glue, no adapter code; engine
+untouched except an extended version pin (selftest 315 -> 315 checks; candidate-nine
+coverage lives in the vitest waterfall suite, which gained one test).
 
 **Platform (ZCode)**
 
@@ -13,25 +13,41 @@ the vitest waterfall suite, 230 -> 232).
   legacy `.claude-plugin/` one it also accepts; skills, hooks and agents are picked
   up from their existing directories by convention. Verified against ZCode 3.9.2's
   shipped plugin/skill/hook loading paths.
-- **`hooks/session-start-zcode.sh`** — ZCode reads the same shared `hooks/hooks.json`,
-  but its hook runner consumes ONLY JSON (`hookSpecificOutput.additionalContext`);
-  plain SessionStart stdout is discarded, exactly like DeepSeek Harness. Same two-line
-  nudge, wrapped in what ZCode parses. The wrapper bails when only Claude/Codex plugin
-  roots are set — those runtimes already deliver the plain-stdout copy — so no platform
-  can ever see both entries' output.
+- **The nudge as a format switch** (`hooks/session-start.sh`, still ONE shared
+  `hooks/hooks.json` entry): ZCode discards plain SessionStart stdout AND records
+  non-JSON runs as failed, so a stock plain-text hook on ZCode means *no delivered
+  nudge plus a permanent failed-run record* for every session with reviews due.
+  The script now detects ZCode's plugin context (`ZCODE_PLUGIN_ROOT`, exported
+  alongside the legacy `CLAUDE_PLUGIN_ROOT`) and emits the JSON
+  `hookSpecificOutput.additionalContext` shape that runner parses; every other
+  platform still receives plain text, byte-identical to 1.14.0's behavior. One
+  registration cannot deliver twice anywhere by construction — and it could not be
+  a second wrapper entry, because the first draft of THIS release shipped exactly
+  that two-entry design and the adversarial review (§4.6) killed it twice over:
+  failed-run noise on ZCode, and a guard provable only against a variable nothing
+  exports. Config-file/manual routes set `ENGRAM_HOOK_FORMAT=json` explicitly.
 - **Waterfall**: `$ZCODE_PLUGIN_ROOT` added FIRST across every engine-resolution copy
   (the three skills plus `agents/engram-artifact-smith.md`) — before
   `$CLAUDE_PLUGIN_ROOT`, because ZCode sets both to the same install root and first
   wins. The waterfall test's own discovery anchor was rewritten to track the loop BODY
   rather than the literal first candidate: the port itself tripped the old anchor, which
   is the failure mode §4.5 exists to catch.
+- **SessionStart matcher gains `compact`** (pre-existing gap this port surfaced):
+  post-compaction sessions re-anchor everywhere the matcher is read.
+- **Assessor routing made capability-first** (`skills/_shared/subagents.md` §5.7 class,
+  found by review): all three skills' spawn conditionals tested only for "your only
+  mechanism is `sessions_spawn`" — a tutor holding ZCode's generic Agent tool satisfied
+  neither trigger and would dead-end on an unregistered named type instead of reading
+  the construction file. The branch now fires when your child-spawn mechanism takes no
+  `engram-*` type at all.
 
 **Docs & verification honesty**
 
 - **[INSTALL-ZCODE.md](INSTALL-ZCODE.md)** — marketplace route (Settings → Discover)
   and clone+symlink route (`~/.agents/skills` shared with dsh), the config-file hook
-  block with its mandatory `enabled: true`, verification checklist, and caveats stated
-  plainly: verified statically + selftest; no live model-driven session recorded yet.
+  block with its mandatory `enabled: true` and explicit `ENGRAM_HOOK_FORMAT=json`,
+  verification checklist, and caveats stated plainly: verified statically + selftest;
+  no live model-driven session recorded yet.
 - **`skills/_shared/subagents.md`** gains "The ZCode shape": fresh-context Agent child,
   items by file path, no reliance on named agent types (ZCode treats declared plugin
   agents as diagnostic-only in this build).

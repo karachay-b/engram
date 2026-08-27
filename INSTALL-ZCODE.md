@@ -33,14 +33,18 @@ That's everything. The install gives you, with zero config:
   same skill. Requires nothing else — every skill carries its full discipline inline.
 - **The nudge.** ZCode loads each installed plugin's `hooks/hooks.json`, and it enables
   the hook runner automatically when a plugin contributes hooks — unlike config-file
-  hooks, no `hooks.enabled` flag is needed. One subtlety drove a real design decision:
-  **ZCode discards plain SessionStart stdout** (unlike Claude Code, which prints it into
-  context), so Engram ships [`hooks/session-start-zcode.sh`](hooks/session-start-zcode.sh)
-  alongside the stock hook — same two-line output, wrapped in the JSON
-  `hookSpecificOutput.additionalContext` contract ZCode actually parses. The shared
-  `hooks/hooks.json` registers both; the ZCode wrapper exits immediately when it detects
-  a runtime that already delivers the plain-stdout version, so no platform ever sees
-  two nudges.
+  hooks, no `hooks.enabled` flag is needed. Two subtleties shaped the wiring. First:
+  ZCode **discards plain SessionStart stdout** (unlike Claude Code, which prints it into
+  context), so a hook that prints plain text runs but delivers nothing. Second, ZCode's
+  runner also records non-JSON stdout as a *failed* hook run, so "silently ignored" is
+  not quiet enough — the log would show engram failing every session where reviews were
+  due. The shared `hooks/hooks.json` therefore registers ONE entry whose script
+  ([`hooks/session-start.sh`](hooks/session-start.sh)) picks its output format from its
+  environment: under ZCode's plugin context `ZCODE_PLUGIN_ROOT` is set alongside the
+  legacy `CLAUDE_PLUGIN_ROOT`, and the presence of that variable switches the same
+  two-line nudge into the JSON `hookSpecificOutput.additionalContext` shape ZCode parses.
+  Claude Code and Codex see plain stdout exactly as before. One registration cannot emit
+  twice on any platform by construction.
 
 Optionally add the tutor rules as ambient instructions so they apply even outside
 skill invocations: append an Engram block from any of the skills'
@@ -86,11 +90,11 @@ into the same home. If you'd rather not share, put the links under `~/.zcode/ski
     "events": {
       "SessionStart": [
         {
-          "matcher": "startup|resume|clear",
+          "matcher": "startup|resume|clear|compact",
           "hooks": [
             {
               "type": "command",
-              "command": "\"/Users/you/.agents/engram/hooks/session-start-zcode.sh\""
+              "command": "\"ENGRAM_HOOK_FORMAT=json /Users/you/.agents/engram/hooks/session-start.sh\""
             }
           ]
         }
@@ -102,8 +106,12 @@ into the same home. If you'd rather not share, put the links under `~/.zcode/ski
 
 Absolute paths — the hook environment does not expand `~`, and there is no plugin-root
 variable in this route, but the script self-resolves relative to its own location
-anyway. `enabled: true` is the step people forget: config-file hooks are disabled by
-default, so without it the hook runs nowhere and looks like an engram bug.
+anyway. The `ENGRAM_HOOK_FORMAT=json` prefix matters here: this route has no plugin
+context, so without it the script would print plain text — which ZCode silently drops.
+(`ENGRAM_HOOK_FORMAT` also unlocks the script for any future host that treats SessionStart
+stdout as data rather than context.) `enabled: true` is the step people forget: config-file
+hooks are disabled by default, so without it the hook runs nowhere and looks like an
+engram bug.
 
 ## Model / auth
 
@@ -141,7 +149,8 @@ python3 ~/.agents/engram/scripts/engram.py doctor      # or your checkout/plugin
 
 # the nudge emits what ZCode parses (empty output = nothing due = correct)
 python3 <root>/scripts/engram.py session-start | head -1     # what will ride inside the JSON
-<root>/hooks/session-start-zcode.sh                          # run under ZCode: prints {"hookSpecificOutput"...}
+<root>/hooks/session-start.sh                                # no vars → plain text (CC behavior)
+ZCODE_PLUGIN_ROOT=<root> <root>/hooks/session-start.sh       # ZCode plugin ctx → {"hookSpecificOutput"...}
 ```
 
 In-session checks: the skill appears in the `/` menu; after starting a session with
@@ -152,9 +161,14 @@ with zero reviews due the hook stays silent (Constitution art. 8).
 
 - Verified against 3.9.2; ZCode ships fast. Drift shows up as a missing surface (nudge
   lost, skill unlisted), not a crash — the port deliberately uses only stock surfaces.
-- Both SessionStart entries fire under ZCode-as-plugin; the stock entry's output is
-  discarded by design, so this costs one extra ~100 ms script spawn per session, kept
-  as the price of one shared hooks file across every platform that reads one.
+- The format switch rides on `ZCODE_PLUGIN_ROOT` being present in ZCode's plugin hook
+  environment. If a future ZCode renames that variable, sessions fall back to plain
+  stdout — which that runner discards — so the symptom is a *missing* nudge, and
+  `ENGRAM_HOOK_FORMAT=json` is the standing override that restores it on any host.
 - A model-driven user session has not been recorded yet (see top). Until one lands,
   treat the learn loop's ZCode behavior as high-confidence-but-unexercised rather than
   proven-on-platform.
+
+## Updating
+
+Plugin route: Settings → Plugin Management refreshes from the marketplace, then reinstall/update Engram there (or ask your agent to pull this repo for the clone route). A stale cached marketplace shows "already current" against an old tree — refresh before you believe it.
