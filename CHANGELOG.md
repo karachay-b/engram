@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.15.1 — 2026-08-27 · what the post-release review caught
+
+The §7.5 reviewer ran against the shipped v1.15.0 tree with the standing numbers
+instruction and came back with one doc defect that strands real users plus two shipped
+wrong sentences. All fixed; selftest 315 -> 315 (docs-only patch), vitest 232 -> 232.
+
+- **Route-B nudge snippet could never fire** (INSTALL-ZCODE.md): the escaped-quote form
+  fused `ENGRAM_HOOK_FORMAT=json` and the script path into ONE argv token, so a user who
+  followed the doc verbatim got `command not found` — and on ZCode that failure is
+  silent-by-design (plain stdout discarded, run logged failed), i.e. a permanently
+  missing nudge while the doc claims it works. The assignment now sits outside the
+  quoted path token, the only form every runner pattern in this repo already uses.
+- **Symlink-loop guard didn't guard the alternate root**: the route-B snippet's comment
+  offered `~/.zcode/skills` but its existence-guard and link target hardcoded
+  `~/.agents/skills` twice more — following the inline alternative silently lost the
+  silent-nesting protection. One `$SKILLS` variable now decides the root.
+- **Two shipped sentences were wrong in the reassuring direction**: (1) v1.15.0's
+  changelog said the new `compact` matcher re-anchors "everywhere the matcher is read" —
+  dsh's own hooks copy (`dsh/hooks.json`, a bridge template maintained separately)
+  still reads startup|resume|clear only; scoped here to the shared file. (2) Port-size
+  counts disagreed across three docs ("three things" / "four functional files" /
+  neither); replaced with one stated counting rule.
+- **package-lock.json root version said 1.1.1** against 1.15.x everywhere else — stale
+  lockstep metadata shipped publicly since long before this release; synced, but note
+  the version-pin selftest still does not cover the lockfile (CI installs via bun).
+- Fuzz harness untouched; last-commit fuzz gate re-run clean at 600 × 24600.
+
 ## 1.15.0 — 2026-08-27 · the ninth platform (ZCode)
 
 ZCode's extension model is Claude Code-compatible by construction, so this is the
