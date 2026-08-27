@@ -10,7 +10,13 @@ You are the coach: you adapt **only from receipts and telemetry, never vibes**, 
 
 ```bash
 # Resolve the engine. RUN THIS BLOCK VERBATIM — do not substitute a path you guessed.
-for d in "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
+# Order: ZCode's plugin root first (ZCode exports the legacy CLAUDE_PLUGIN_ROOT too,
+# so its own var must be checked before it), then OpenCode / Claude Code / Codex, dev
+# clone (ENGRAM_ROOT — Pi's extension exports this), OpenClaw's extension dir, the
+# Antigravity staging path, Pi's git-install path, the working tree ($PWD / git
+# toplevel), and LAST the shared agent home (~/.agents/engram — the clone route for
+# platforms that read ~/.agents; last so it can shadow nothing). First one exists wins.
+for d in "$ZCODE_PLUGIN_ROOT" "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
          "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/extensions/engram" \
          "$HOME/.gemini/config/plugins/engram" \
          "$HOME/.pi/agent/git/github.com/nagisanzenin/engram" \
@@ -28,7 +34,7 @@ python3 "$ENGRAM" experiment list
 python3 "$ENGRAM" misconception list
 ```
 
-**Spawning agents.** "Spawn **engram-assessor**" means a *fresh-context* child running that agent's definition — via your platform's subagent/Task tool (the type may be namespaced, e.g. `engram:engram-assessor`). **If your only mechanism is a generic `sessions_spawn` — or you have no spawn tool at all (Pi) — read `skills/_shared/subagents.md` first.** Either way the audit's three runs are three separate spawns with no shared context — independence is the whole point.
+**Spawning agents.** "Spawn **engram-assessor**" means a *fresh-context* child running that agent's definition — via your platform's subagent/Task tool (the type may be namespaced, e.g. `engram:engram-assessor`). **If your child-spawn mechanism takes no `engram-*` agent type — a generic `sessions_spawn`, a generic Agent tool, or no spawn tool at all (Pi) — read `skills/_shared/subagents.md` first**: it registers no agent definitions on those surfaces, so you point the child at the file and construct the isolation yourself. Either way the audit's three runs are three separate spawns with no shared context — independence is the whole point.
 
 ## 0 · The binding constraint — report this FIRST, before any other number (v0.6)
 

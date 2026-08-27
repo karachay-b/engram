@@ -62,13 +62,14 @@ The single most error-prone step. There is no central version constant; these mu
 
 ```bash
 grep -rnE '"version"|version-[0-9]|selftest-[0-9]|[0-9]+ checks|[0-9]+/[0-9]+ checks' \
-  .claude-plugin .codex-plugin README.md INSTALL-CODEX.md
+  .claude-plugin .codex-plugin .zcode-plugin README.md INSTALL-CODEX.md
 ```
 
 | File | What to change |
 |---|---|
 | `.claude-plugin/plugin.json` | `"version"` |
 | `.codex-plugin/plugin.json` | `"version"` (lockstep with the Claude one) |
+| `.zcode-plugin/plugin.json` | `"version"` (lockstep; the selftest covers it) |
 | `package.json` | `"version"` — this is what npm publishes; a stale one makes `npm publish` fail or, worse, ship old code under a new tag |
 | `scripts/engram.py` | `ENGRAM_VERSION` — **a selftest pins it to plugin.json**, so a missed bump goes RED (it caught v1.0.1) |
 | `README.md` | version badge (`badge/version-X.Y.Z` **and** its `alt`) — **v1.0.3 AND v1.0.4 both missed it**; the npm badge beside it is live (shields.io reads the registry) and needs no edit |
@@ -635,7 +636,7 @@ release.**
 
 ## 5.7 · The omni-repo gate ⚠ NEW — required when a release adds or changes a PLATFORM
 
-`skills/` is shared verbatim by six platforms. Every word added to a SKILL.md for the platform
+`skills/` is shared verbatim by nine platforms. Every word added to a SKILL.md for the platform
 you are porting is also read, that same session, by the five you are not. v1.0.8 learned both
 halves of this the hard way, and neither showed up in any test that existed.
 
