@@ -14,7 +14,11 @@ On Claude Code, Codex, OpenCode, and Antigravity these are registered agents and
 them** — OpenClaw reads Engram as a Codex bundle, and bundles map skills only;
 Pi ships no subagent mechanism at all, by design; DeepSeek Harness has subagent
 tools but no registration of external agent definitions. On all three you
-construct the same isolation yourself, from the platform's shape below.
+construct the same isolation yourself, from the platform's shape below. ZCode
+sits between: its plugin system can surface Engram's `agents/` as custom
+subagent types (check Settings → Subagents on your build), but no such
+registration is assumed — the generic-child construction below is always
+available and is what this port guarantees.
 
 ## The OpenClaw shape
 
@@ -90,6 +94,36 @@ than concluding the child hung.
 The architect and the smith spawn the same way — swap the agent file and the
 task text. The child uses the learner's configured default pi model; pass
 `--model` only when they asked for a specific one.
+
+## The ZCode shape
+
+ZCode ships an **Agent tool** whose children start fresh: a new Agent call runs
+in its own context and sees *only* the prompt you hand it — never the parent
+conversation. That process boundary is exactly the isolation blindness needs,
+so the construction mirrors the OpenClaw shape with ZCode's spelling:
+
+```
+Agent(
+  subagent_type: "general-purpose",
+  description:  "Blind-grade engram receipts",
+  prompt: "Read <ENGRAM_ROOT>/agents/engram-assessor.md and follow it exactly as
+           your operating instructions. Grade the items in <the file you wrote
+           with `stash list > …`>. Return only the receipt JSON it specifies —
+           no commentary."
+)
+```
+
+- If your build lists the engram agents under Settings → Subagents (ZCode can
+  surface a plugin's `agents/` directory as subagent types), spawning the named
+  type directly is equivalent — **provided** it is a fresh-context spawn. A
+  child that inherits this conversation is not blind; skip any such mode.
+- Resolve `<ENGRAM_ROOT>` with the same waterfall the skills run — echo
+  `$ZCODE_PLUGIN_ROOT` first, then fall back as in SKILL.md. On the clone route
+  (`~/.agents/engram` or a checkout) it lands wherever you installed; on the
+  marketplace route the plugin cache root carries everything including
+  `agents/`.
+- Do not paste stash contents into the prompt. Write `stash list > <file>` and
+  pass the path (see "Rules that do not bend" below).
 
 ## Rules that do not bend
 

@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased · the ninth platform (ZCode)
+
+ZCode's extension model is Claude Code-compatible by construction, so this is the
+thinnest port since dsh — three files, no adapter code:
+
+- **`.zcode-plugin/plugin.json`** — ZCode's own manifest takes priority over the
+  legacy `.claude-plugin/` one it also accepts; skills, hooks and agents are picked
+  up from their existing directories by convention.
+- **`hooks/session-start-zcode.sh`** — ZCode reads the same shared
+  `hooks/hooks.json`, but its hook runner consumes ONLY JSON
+  (`hookSpecificOutput.additionalContext`); plain SessionStart stdout is discarded,
+  exactly like DeepSeek Harness. Same two-line nudge, wrapped in what ZCode parses.
+  The wrapper bails when only Claude/Codex plugin roots are set — those runtimes
+  already deliver the plain-stdout copy — so no platform can ever see both entries'
+  output. Registered alongside the stock hook under one SessionStart matcher.
+- **Waterfall**: `$ZCODE_PLUGIN_ROOT` added FIRST across every engine-resolution
+  copy (the three skills plus `agents/engram-artifact-smith.md`) — before
+  `$CLAUDE_PLUGIN_ROOT`, because ZCode sets both to the same install root and first
+  wins. Pinned by an extended `skills-waterfall.test.ts` case and a ninth candidate;
+  `subagents.md` gains "The ZCode shape" (fresh-context Agent child, items by file).
+- **[INSTALL-ZCODE.md](INSTALL-ZCODE.md)** — marketplace route (Settings → Discover)
+  and clone+symlink route (`~/.agents/skills` shared with dsh), the config-file hook
+  block with its mandatory `enabled: true`, verification checklist, and honest
+  caveats: verified against ZCode 3.9.2 statically + selftest; no live model-driven
+  session recorded yet.
+- Version-pinning selftest now covers the zcode manifest; protocol's bump table
+  updated to match.
+
 ## 1.14.0 — 2026-08-18 · the sense-making layer (docs/16)
 
 KLI names three learning processes; Engram routed everything through two of them

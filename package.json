@@ -29,7 +29,8 @@
     "fsrs",
     "spaced-repetition",
     "pi-package",
-    "dsh-plugin"
+    "dsh-plugin",
+    "zcode-plugin"
   ],
   "engines": {
     "opencode": ">=1.0.0 || >=0.0.0-0"
@@ -62,7 +63,9 @@
     "INSTALL-OPENCLAW.md",
     "INSTALL-OPENCODE-V2.md",
     "dsh",
-    "INSTALL-DSH.md"
+    "INSTALL-DSH.md",
+    ".zcode-plugin",
+    "INSTALL-ZCODE.md"
   ],
   "repository": {
     "type": "git",

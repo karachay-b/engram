@@ -13,7 +13,7 @@ single-expression form this file used to carry has no OpenClaw and no dev-clone 
 so on those the smith could not find the engine at all):
 
 ```bash
-for d in "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
+for d in "$ZCODE_PLUGIN_ROOT" "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
          "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/extensions/engram" \
          "$HOME/.gemini/config/plugins/engram" \
          "$HOME/.pi/agent/git/github.com/nagisanzenin/engram" \
