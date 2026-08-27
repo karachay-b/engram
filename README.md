@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.15.0-6D4AA8.svg" alt="Version 1.15.0">
+  <img src="https://img.shields.io/badge/version-1.15.1-6D4AA8.svg" alt="Version 1.15.1">
   <a href="https://www.npmjs.com/package/opencode-engram-learning"><img src="https://img.shields.io/npm/v/opencode-engram-learning?label=npm&color=6D4AA8" alt="npm package"></a>
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/selftest-315%2F315-3E7D5A.svg" alt="315/315 checks">

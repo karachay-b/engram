@@ -5,7 +5,9 @@ extension model is Claude Code-compatible by construction: a plugin manifest at
 `.zcode-plugin/plugin.json` (or the legacy `.claude-plugin/` one Engram already ships),
 native `SKILL.md` directory-bundle skills discovered at user and workspace scope, a
 `SessionStart` hook runner, and `AGENTS.md` instruction files. The port adds exactly
-three things: a ZCode manifest, one hook wrapper, and this document. No adapter code.
+the same shape as dsh: one manifest, one format switch inside the existing shared hook
+script, `$ZCODE_PLUGIN_ROOT` first in the engine-resolution waterfall's four loops, and
+documentation. No adapter code.
 
 Verified against **ZCode 3.9.2** (macOS, August 2026) — statically against the shipped
 runtime's own plugin/skill/hook loading paths, plus the live `engram.py selftest`
@@ -63,18 +65,21 @@ git clone https://github.com/nagisanzenin/engram ~/.agents/engram
 Then link the three skills into either discovery root:
 
 ```sh
-mkdir -p ~/.agents/skills          # or ~/.zcode/skills for ZCode-only installs
+# ZCode-only installs: point SKILLS at ~/.zcode/skills instead.
+SKILLS="$HOME/.agents/skills"
+mkdir -p "$SKILLS"
 for s in learn review coach; do
-  if [ -e ~/.agents/skills/$s ] && [ ! -L ~/.agents/skills/$s ]; then
-    echo "engram: ~/.agents/skills/$s already exists — move it aside first"; continue
+  if [ -e "$SKILLS/$s" ] && [ ! -L "$SKILLS/$s" ]; then
+    echo "engram: $SKILLS/$s already exists — move it aside first"; continue
   fi
-  ln -sfn ~/.agents/engram/skills/$s ~/.agents/skills/$s
+  ln -sfn ~/.agents/engram/skills/$s "$SKILLS/$s"
 done
 ```
 
 (The guard matters: `ln -sfn` into an existing real directory silently nests the link
 one level deep, where discovery deliberately does not look — and `learn`/`review`/
-`coach` are generic names in a shared namespace.)
+`coach` are generic names in a shared namespace. One variable decides the root, so the
+guard protects whichever root you pick.)
 
 `~/.agents/skills` is the cross-tool root: the same three links light the skills up in
 ZCode *and* the DeepSeek Harness port ([INSTALL-DSH.md](INSTALL-DSH.md)), which clones
@@ -94,7 +99,7 @@ into the same home. If you'd rather not share, put the links under `~/.zcode/ski
           "hooks": [
             {
               "type": "command",
-              "command": "\"ENGRAM_HOOK_FORMAT=json /Users/you/.agents/engram/hooks/session-start.sh\""
+              "command": "ENGRAM_HOOK_FORMAT=json \"/Users/you/.agents/engram/hooks/session-start.sh\""
             }
           ]
         }
