@@ -67,7 +67,13 @@ READS = ["stats","adherence","retention","decay","topics","due","next","topic-st
          "gold","grader-health","session-start","report","doctor","transfer","path",
          # v1.11.2: the stash's own read sub-actions. `stash list` is the blind assessor's
          # ENTIRE input, so a brick here is a settle that cannot happen at all.
-         "stash-list","stash-count"]
+         "stash-list","stash-count",
+         # v1.15.0: enumerated from the dispatch table per §4.7's amendment ritual and
+         # found three read paths this harness had never fed: the adaptation proposals
+         # and their append-only ledger, plus the external-adjudication scorer. `propose`
+         # and `adaptations` read experiment/ledger state; `adjudication-stats` parses a
+         # JSONL upload whose shape a contributor controls.
+         "propose","adaptations","adjudication-stats"]
 crashes = 0; runs = 0
 for seed in (11, 22, 33):
     r = random.Random(seed)
@@ -82,7 +88,9 @@ for seed in (11, 22, 33):
                   "topic-status":E.cmd_topic_status,"gold":E.cmd_gold,"grader-health":E.cmd_grader_health,
                   "session-start":E.cmd_session_start,"report":E.cmd_report,"doctor":E.cmd_doctor,
                   "transfer":E.cmd_transfer,"path":E.cmd_path,
-                  "stash-list":E.cmd_stash,"stash-count":E.cmd_stash}[name]
+                  "stash-list":E.cmd_stash,"stash-count":E.cmd_stash,
+                  "propose":E.cmd_propose,"adaptations":E.cmd_adaptations,
+                  "adjudication-stats":E.cmd_adjudication_stats}[name]
             for args in ([E._ns(topic="t1"), E._ns(), E._ns(cap=3), E._ns(order="savings"),
                           E._ns(cap=2, topic="t1")] if name == "due" else
                          [E._ns(action="list")] if name == "stash-list" else
