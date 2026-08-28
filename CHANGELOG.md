@@ -1,5 +1,100 @@
 # Changelog
 
+## 1.15.1 — 2026-08-27 · what the post-release review caught
+
+The §7.5 reviewer ran against the shipped v1.15.0 tree with the standing numbers
+instruction and came back with one doc defect that strands real users plus two shipped
+wrong sentences. All fixed; selftest 315 -> 315 (docs-only patch), vitest 232 -> 232.
+
+- **Route-B nudge snippet could never fire** (INSTALL-ZCODE.md): the escaped-quote form
+  fused `ENGRAM_HOOK_FORMAT=json` and the script path into ONE argv token, so a user who
+  followed the doc verbatim got `command not found` — and on ZCode that failure is
+  silent-by-design (plain stdout discarded, run logged failed), i.e. a permanently
+  missing nudge while the doc claims it works. The assignment now sits outside the
+  quoted path token, the only form every runner pattern in this repo already uses.
+- **Symlink-loop guard didn't guard the alternate root**: the route-B snippet's comment
+  offered `~/.zcode/skills` but its existence-guard and link target hardcoded
+  `~/.agents/skills` twice more — following the inline alternative silently lost the
+  silent-nesting protection. One `$SKILLS` variable now decides the root.
+- **Two shipped sentences were wrong in the reassuring direction**: (1) v1.15.0's
+  changelog said the new `compact` matcher re-anchors "everywhere the matcher is read" —
+  dsh's own hooks copy (`dsh/hooks.json`, a bridge template maintained separately)
+  still reads startup|resume|clear only; scoped here to the shared file. (2) Port-size
+  counts disagreed across three docs ("three things" / "four functional files" /
+  neither); replaced with one stated counting rule.
+- **package-lock.json root version said 1.1.1** against 1.15.x everywhere else — stale
+  lockstep metadata shipped publicly since long before this release; synced, but note
+  the version-pin selftest still does not cover the lockfile (CI installs via bun).
+- Fuzz harness untouched; last-commit fuzz gate re-run clean at 600 × 24600.
+
+## 1.15.0 — 2026-08-27 · the ninth platform (ZCode)
+
+ZCode's extension model is Claude Code-compatible by construction, so this is the
+thinnest port since dsh — four functional files of glue, no adapter code; engine
+untouched except an extended version pin (selftest 315 -> 315 checks; candidate-nine
+coverage lives in the vitest waterfall suite, which gained one test).
+
+**Platform (ZCode)**
+
+- **`.zcode-plugin/plugin.json`** — ZCode's own manifest takes priority over the
+  legacy `.claude-plugin/` one it also accepts; skills, hooks and agents are picked
+  up from their existing directories by convention. Verified against ZCode 3.9.2's
+  shipped plugin/skill/hook loading paths.
+- **The nudge as a format switch** (`hooks/session-start.sh`, still ONE shared
+  `hooks/hooks.json` entry): ZCode discards plain SessionStart stdout AND records
+  non-JSON runs as failed, so a stock plain-text hook on ZCode means *no delivered
+  nudge plus a permanent failed-run record* for every session with reviews due.
+  The script now detects ZCode's plugin context (`ZCODE_PLUGIN_ROOT`, exported
+  alongside the legacy `CLAUDE_PLUGIN_ROOT`) and emits the JSON
+  `hookSpecificOutput.additionalContext` shape that runner parses; every other
+  platform still receives plain text, byte-identical to 1.14.0's behavior. One
+  registration cannot deliver twice anywhere by construction — and it could not be
+  a second wrapper entry, because the first draft of THIS release shipped exactly
+  that two-entry design and the adversarial review (§4.6) killed it twice over:
+  failed-run noise on ZCode, and a guard provable only against a variable nothing
+  exports. Config-file/manual routes set `ENGRAM_HOOK_FORMAT=json` explicitly.
+- **Waterfall**: `$ZCODE_PLUGIN_ROOT` added FIRST across every engine-resolution copy
+  (the three skills plus `agents/engram-artifact-smith.md`) — before
+  `$CLAUDE_PLUGIN_ROOT`, because ZCode sets both to the same install root and first
+  wins. The waterfall test's own discovery anchor was rewritten to track the loop BODY
+  rather than the literal first candidate: the port itself tripped the old anchor, which
+  is the failure mode §4.5 exists to catch.
+- **SessionStart matcher gains `compact`** (pre-existing gap this port surfaced):
+  post-compaction sessions re-anchor everywhere the matcher is read.
+- **Assessor routing made capability-first** (`skills/_shared/subagents.md` §5.7 class,
+  found by review): all three skills' spawn conditionals tested only for "your only
+  mechanism is `sessions_spawn`" — a tutor holding ZCode's generic Agent tool satisfied
+  neither trigger and would dead-end on an unregistered named type instead of reading
+  the construction file. The branch now fires when your child-spawn mechanism takes no
+  `engram-*` type at all.
+
+**Docs & verification honesty**
+
+- **Gates run for this release:** selftest 315/315 after bump; every new check
+  mutation-tested (3/3 red when broken); two-agent adversarial review — both MEDIUMs
+  killed at the class level (the two-entry hook draft of this very branch died here);
+  fuzz extended with three read paths its own dispatch-table enumeration had missed,
+  600 states × 24600 calls, CRASHES=0; full engine live-drive including the read-only
+  real-state hash gate; uncontaminated architect + artifact-smith dogfood on the release
+  tree with an independent contract audit of the built explorable; §5.7 omni-repo gate
+  answered by a clean Claude Code persona over the shipped skill files (resolution,
+  spawn mechanics, foreign-reference inventory all correct).
+- **§5.6 user session: WAIVED by the maintainer's explicit decision for this glue-only
+  port** (engine untouched beyond a version pin). The standing honest note applies:
+  until a real ZCode session lands, this platform's learn-loop behavior is
+  high-confidence-but-unexercised — [INSTALL-ZCODE.md](INSTALL-ZCODE.md) says so in
+  place, and first-run reports are explicitly requested.
+- **[INSTALL-ZCODE.md](INSTALL-ZCODE.md)** — marketplace route (Settings → Discover)
+  and clone+symlink route (`~/.agents/skills` shared with dsh), the config-file hook
+  block with its mandatory `enabled: true` and explicit `ENGRAM_HOOK_FORMAT=json`,
+  verification checklist, and caveats stated plainly: verified statically + selftest;
+  no live model-driven session recorded yet.
+- **`skills/_shared/subagents.md`** gains "The ZCode shape": fresh-context Agent child,
+  items by file path, no reliance on named agent types (ZCode treats declared plugin
+  agents as diagnostic-only in this build).
+- Version-pinning selftest now covers the zcode manifest; the protocol's bump table
+  updated to match, so a future release cannot forget it.
+
 ## 1.14.0 — 2026-08-18 · the sense-making layer (docs/16)
 
 KLI names three learning processes; Engram routed everything through two of them

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.14.0-6D4AA8.svg" alt="Version 1.14.0">
+  <img src="https://img.shields.io/badge/version-1.15.1-6D4AA8.svg" alt="Version 1.15.1">
   <a href="https://www.npmjs.com/package/opencode-engram-learning"><img src="https://img.shields.io/npm/v/opencode-engram-learning?label=npm&color=6D4AA8" alt="npm package"></a>
   <img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="MIT License">
   <img src="https://img.shields.io/badge/selftest-315%2F315-3E7D5A.svg" alt="315/315 checks">
@@ -17,7 +17,7 @@
 
 > **The mix-up worth clearing first: Engram is not an agent-memory plugin.** It doesn't give your agent persistent memory, context, or knowledge of your codebase — memory MCPs and context tools do that, *for the agent*. Engram points the other way: **it's a learning system for the human.** Your agent becomes a tutor that makes you do the thinking, a blind examiner that checks you actually got it, and a scheduler that brings each idea back right before your brain drops it. The agent doesn't get smarter. **You do — measurably, with receipts.**
 
-Born as a Claude Code plugin; the same skills and engine now run on eight agentic platforms — including, as of v1.0.8, one that puts the tutor in your chat app, and, as of v1.12.0, both OpenCode generations (the 2.0 beta rebuilt its plugin API; Engram ships adapters for both in one package):
+Born as a Claude Code plugin; the same skills and engine now run on nine agentic platforms — including, as of v1.0.8, one that puts the tutor in your chat app, and, as of v1.12.0, both OpenCode generations (the 2.0 beta rebuilt its plugin API; Engram ships adapters for both in one package):
 
 ```bash
 claude plugin marketplace add nagisanzenin/engram
@@ -34,11 +34,13 @@ claude plugin install engram@engram
 | **OpenClaw** | `openclaw plugins install engram --marketplace nagisanzenin/engram` → [INSTALL-OPENCLAW.md](INSTALL-OPENCLAW.md) — verified on 2026.7.1-2 | `/learn` `/review` `/coach` |
 | **Pi** | `pi install git:github.com/nagisanzenin/engram` → [INSTALL-PI.md](INSTALL-PI.md) — verified on 0.83.0 & 0.74.2 | `/learn` `/review` `/coach` |
 | **DeepSeek Harness** | clone + 3 symlinks → [INSTALL-DSH.md](INSTALL-DSH.md) — no adapter code, all stock dsh surfaces; verified on 0.1.0-rc.6 | `/learn` `/review` `/coach` |
+| **ZCode** | Settings → Plugin Management → Discover → add `github.com/nagisanzenin/engram` → [INSTALL-ZCODE.md](INSTALL-ZCODE.md) — verified against 3.9.2 | `/learn` `/review` `/coach` |
 
 <sub>OpenCode: `opencode.json` is read globally (`~/.config/opencode/opencode.json`) or per-project; pin to source instead of npm with `"plugin": ["git+https://github.com/nagisanzenin/engram.git"]`. **OpenCode 2.0 beta** (`opencode2`) uses a new plugin API — same package name works there too (V2 auto-selects the right adapter): [INSTALL-OPENCODE-V2.md](INSTALL-OPENCODE-V2.md).</sub><br>
 <sub>Antigravity: The due-review session nudge isn't ported yet, and the `architect` and `smith` subagents are currently dropped by AG 1.1.4's strict installer. Everything else works the same.</sub><br>
 <sub>OpenClaw: the nudge needs `openclaw config set hooks.internal.enabled true` (OpenClaw ignores plugin hooks until internal hooks are switched on), and it fires on `/new` and `/reset` rather than every session. Engram's agents aren't registered — the skills spawn them through `sessions_spawn` with isolated context instead, which keeps the assessor blind. Details in [INSTALL-OPENCLAW.md](INSTALL-OPENCLAW.md).</sub><br>
 <sub>DeepSeek Harness: developer preview — the port uses only stock dsh capabilities (native `~/.agents/skills` discovery, the Claude Code hook bridge for the nudge), so harness drift degrades a surface rather than crashing. Needs a DeepSeek API key. Skills-in-session and the full nudge chain are verified on the real runtime; a model-driven session is not yet — first-run reports welcome. Details in [INSTALL-DSH.md](INSTALL-DSH.md).</sub><br>
+<sub>ZCode: Claude Code-compatible plugin surfaces, so the port is manifest + one hook-format switch + docs. ZCode discards plain SessionStart stdout and logs non-JSON runs as failed — so the shared hook script detects ZCode's plugin context (`ZCODE_PLUGIN_ROOT`) and emits the JSON shape that runner parses; on every other platform it prints plain text exactly as before. The blind assessor runs as a fresh-context generic Agent child; declared plugin agents are diagnostic-only in ZCode 3.9.2. A live model-driven session is not yet recorded — first-run reports welcome. Details in [INSTALL-ZCODE.md](INSTALL-ZCODE.md).</sub><br>
 <sub>Pi: no subagent tool by design — the skills spawn the blind assessor as a fresh `pi -p` process instead (isolation by process boundary). The nudge is one TUI notice at session start plus one injected message on your first prompt (worst case the next one — the probe never blocks startup). Details in [INSTALL-PI.md](INSTALL-PI.md).</sub>
 
 Then, inside your coding assistant (command spelling per your platform's row above):
@@ -400,7 +402,7 @@ hooks/              SessionStart re-anchor (Claude Code/Codex) · pre_llm_call p
 hooks/engram-due/   HOOK.md + handler.js                    (OpenClaw hook pack — same nudge, same silence)
 scripts/engram.py   deterministic core: FSRS-4.5, state, receipts, stats, dashboard, selftest
 docs/               theory · prior art · architecture · roadmap
-INSTALL-CODEX.md · INSTALL-HERMES.md · INSTALL-OPENCLAW.md    per-platform glue, at the repo root
+INSTALL-CODEX.md · INSTALL-HERMES.md · INSTALL-OPENCLAW.md · INSTALL-ZCODE.md    per-platform glue, at the repo root
 ```
 
 One codebase, many agents: `skills/` and `scripts/engram.py` are shared verbatim; each platform gets its own thin glue (manifest, subagent format, or hook adapter). See [INSTALL-CODEX.md](INSTALL-CODEX.md) · [INSTALL-HERMES.md](INSTALL-HERMES.md).

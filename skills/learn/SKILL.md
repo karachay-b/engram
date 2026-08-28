@@ -10,13 +10,14 @@ You are the **tutor**. Your discipline lives in `skills/_shared/dialogue-grammar
 
 ```bash
 # Resolve the engine. RUN THIS BLOCK VERBATIM — do not substitute a path you guessed.
-# Order: plugin root on OpenCode / Claude Code / Codex, dev clone (ENGRAM_ROOT —
-# Pi's extension exports this), OpenClaw's extension dir, the Antigravity staging
-# path, Pi's git-install path, the working tree ($PWD / git toplevel — a
-# contributor's checkout must beat any stale clone), and LAST the shared agent
-# home (~/.agents/engram — the clone route for platforms that read ~/.agents,
+# Order: ZCode's plugin root first (ZCode exports the legacy CLAUDE_PLUGIN_ROOT too,
+# so its own var must be checked before it), then OpenCode / Claude Code / Codex, dev
+# clone (ENGRAM_ROOT — Pi's extension exports this), OpenClaw's extension dir, the
+# Antigravity staging path, Pi's git-install path, the working tree ($PWD / git
+# toplevel — a contributor's checkout must beat any stale clone), and LAST the shared
+# agent home (~/.agents/engram — the clone route for platforms that read ~/.agents,
 # e.g. DeepSeek Harness; last so it can shadow nothing). First one that exists wins.
-for d in "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
+for d in "$ZCODE_PLUGIN_ROOT" "$OPENCODE_PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$CODEX_PLUGIN_ROOT" "$ENGRAM_ROOT" \
          "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/extensions/engram" \
          "$HOME/.gemini/config/plugins/engram" \
          "$HOME/.pi/agent/git/github.com/nagisanzenin/engram" \
@@ -30,9 +31,9 @@ if [ -z "$ENGRAM" ]; then
 fi                                  # which dumps a python usage error at the learner
 ```
 
-If none of those are set, resolve the plugin root as the directory containing `.claude-plugin/plugin.json` (or `.codex-plugin/plugin.json`) and point `$ENGRAM` at its `scripts/engram.py`.
+If none of those are set, resolve the plugin root as the directory containing `.zcode-plugin/plugin.json`, `.claude-plugin/plugin.json`, or `.codex-plugin/plugin.json` and point `$ENGRAM` at its `scripts/engram.py`.
 
-**Spawning agents.** Every "spawn **engram-…**" below means: start a *fresh-context* child running that agent's definition. Use whichever your platform gives you — a subagent/Task tool that takes `engram-curriculum-architect` (or a namespaced `engram:engram-curriculum-architect`) as a type, or a generic `sessions_spawn`. **If your only mechanism is `sessions_spawn` — or your platform has no spawn tool at all — read `skills/_shared/subagents.md` before spawning** — those platforms register no agent definitions, so you must point the child at the file and construct the isolation yourself.
+**Spawning agents.** Every "spawn **engram-…**" below means: start a *fresh-context* child running that agent's definition. Use whichever your platform gives you — a subagent/Task tool that takes `engram-curriculum-architect` (or a namespaced `engram:engram-curriculum-architect`) as a type, or a generic `sessions_spawn`. **If your child-spawn mechanism takes no `engram-*` agent type — a generic `sessions_spawn`, a generic Agent tool whose types are unrelated to Engram's agents, or no spawn tool at all — read `skills/_shared/subagents.md` before spawning** — those platforms register no agent definitions, so you must point the child at the file and construct the isolation yourself.
 
 Everything stateful goes through `python3 "$ENGRAM" …`. You never compute dates or grades for scheduling; you never advance a node without a receipt; you never hold a learner's ungraded work only in conversation (the stash exists so context loss can't destroy their effort).
 

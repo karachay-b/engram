@@ -33,7 +33,7 @@ SCHEMA = 1
 # The one place the engine knows its own version. Read by `export`, so a shared receipt states
 # which engine produced it — a corpus of receipts from unknown engine versions is not a corpus.
 # Pinned against .claude-plugin/plugin.json by a selftest, so it cannot drift.
-ENGRAM_VERSION = "1.14.0"
+ENGRAM_VERSION = "1.15.1"
 RETENTION_DEFAULT = 0.90
 INTERVAL_MAX = 365
 RETENTION_MIN, RETENTION_MAX = 0.70, 0.97   # sane desired-retention bounds
@@ -9773,6 +9773,7 @@ def cmd_selftest(_args):
     def _version_matches_all_manifests(_h=None):
         for rel in (".claude-plugin/plugin.json",
                      ".codex-plugin/plugin.json",
+                     ".zcode-plugin/plugin.json",
                      "package.json"):
             mf = os.path.join(_plugin_root(), rel)
             if not os.path.exists(mf):
@@ -9780,7 +9781,7 @@ def cmd_selftest(_args):
             if json.load(open(mf, encoding="utf-8"))["version"] != ENGRAM_VERSION:
                 return False
         return True
-    check("ENGRAM_VERSION matches all plugin manifests (claude-plugin, codex-plugin, package.json)",
+    check("ENGRAM_VERSION matches all plugin manifests (claude-plugin, codex-plugin, zcode-plugin, package.json)",
           _version_matches_all_manifests)
 
     # -- ⚠ PROPERTY-BASED: put text in EVERY field. Assert NONE of it survives the export. --

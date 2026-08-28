@@ -17,11 +17,21 @@ const root = resolve(__dirname, "..")
 /** Every file carrying a waterfall copy — DISCOVERED, not enumerated. The
  *  v1.13.0 release hardcoded the three skills here and missed the fourth
  *  copy in agents/engram-artifact-smith.md; §7.5 proved that copy strands a
- *  dsh-only machine on the visuals path. Discovery keeps platform nine from
- *  repeating this. */
+ *  dsh-only machine on the visuals path. Discovery keeps platform ten from
+ *  repeating this. The anchor is the loop BODY, not the `for d in …` line:
+ *  the first candidate legitimately changes per port (ZCode now leads), so
+ *  pinning the literal first candidate would break discovery every time one
+ *  is added — the v1.15.0 ZCode port found exactly that trap by failing it.
+ *
+ *  CONVENTION this encodes, so a future port does not lose coverage: every
+ *  waterfall copy must resolve the engine through a loop whose body contains
+ *  the exact string `[ -f "$d/scripts/engram.py" ]` and lives under skills/
+ *  or agents/. A differently-spelled guard (an intermediate variable, `-x`,
+ *  etc.) needs its own discovered file or it ships unasserted — see the
+ *  codex/agents/*.toml twins, which live outside both dirs for that reason. */
 function waterfallFiles(): string[] {
   const { execSync } = require("node:child_process")
-  const out = execSync('grep -rl \'for d in "$OPENCODE_PLUGIN_ROOT"\' skills agents', { cwd: root, encoding: "utf-8" })
+  const out = execSync('grep -rlF \'[ -f "$d/scripts/engram.py" ]\' skills agents', { cwd: root, encoding: "utf-8" })
   const files = out.trim().split("\n").filter(Boolean)
   expect(files.length).toBeGreaterThanOrEqual(4)
   return files
@@ -29,7 +39,7 @@ function waterfallFiles(): string[] {
 
 function waterfallBlockAt(relPath: string): string {
   const content = readFileSync(resolve(root, relPath), "utf-8")
-  const start = content.indexOf('for d in "$OPENCODE_PLUGIN_ROOT"')
+  const start = content.indexOf('for d in "')
   const end = content.indexOf("; do", start)
   expect(start, `${relPath}: candidate list missing`).toBeGreaterThan(-1)
   return content.slice(start, end)
@@ -66,6 +76,7 @@ describe("engine-resolution waterfall", () => {
     for (const file of waterfallFiles()) {
     const block = waterfallBlockAt(file)
     for (const candidate of [
+      '"$ZCODE_PLUGIN_ROOT"',
       '"$OPENCODE_PLUGIN_ROOT"',
       '"$CLAUDE_PLUGIN_ROOT"',
       '"$CODEX_PLUGIN_ROOT"',
@@ -90,5 +101,13 @@ describe("engine-resolution waterfall", () => {
     const list = candidateList("learn")
     expect(list.indexOf('"$PWD"')).toBeGreaterThan(-1)
     expect(list.indexOf('"$HOME/.agents/engram"')).toBeGreaterThan(list.indexOf('"$PWD"'))
+  })
+
+  it("resolves ZCode's root ahead of its legacy Claude alias (ZCode sets both; first wins)", () => {
+    const list = candidateList("learn")
+    expect(list.indexOf('"$ZCODE_PLUGIN_ROOT"')).toBeGreaterThan(-1)
+    expect(list.indexOf('"$CLAUDE_PLUGIN_ROOT"')).toBeGreaterThan(
+      list.indexOf('"$ZCODE_PLUGIN_ROOT"'),
+    )
   })
 })
